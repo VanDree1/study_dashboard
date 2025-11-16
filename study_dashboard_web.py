@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timedelta
+from itertools import groupby
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -149,6 +151,89 @@ scientific_methods_schedule = [
     },
 ]
 
+accounting_theory_schedule = [
+    {
+        "date": "2025-11-18",
+        "title": "Financial Accounting 2",
+        "type": "Lecture",
+        "time": "08:15–10:00",
+        "location": "Hörsal 2, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-11-25",
+        "title": "Measurement 1",
+        "type": "Lecture",
+        "time": "10:15–12:00",
+        "location": "Hörsal 2, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-11-26",
+        "title": "Measurement 2",
+        "type": "Lecture",
+        "time": "13:15–15:00",
+        "location": "Hörsal 2, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-11-27",
+        "title": "Measurement 3",
+        "type": "Lecture",
+        "time": "15:15–17:00",
+        "location": "Hörsal 1, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-12-01",
+        "title": "Management Accounting 1",
+        "type": "Lecture",
+        "time": "15:15–17:00",
+        "location": "Hörsal 1, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-12-03",
+        "title": "Management Accounting 2",
+        "type": "Lecture",
+        "time": "08:15–10:00",
+        "location": "Hörsal 2, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-12-09",
+        "title": "Seminar 1 – Financial Accounting",
+        "type": "Seminar",
+        "time": "10:15–12:00",
+        "location": "K334, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-12-10",
+        "title": "Integration",
+        "type": "Lecture",
+        "time": "08:15–10:00",
+        "location": "Hörsal 2, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2025-12-15",
+        "title": "Seminar 2 – Management Accounting",
+        "type": "Seminar",
+        "time": "10:15–12:00",
+        "location": "K334, Ekonomikum",
+        "teacher": "",
+    },
+    {
+        "date": "2026-01-09",
+        "title": "Written Exam",
+        "type": "Exam",
+        "time": "08:00–12:00",
+        "location": "See Ladok",
+        "teacher": "",
+    },
+]
+
 SECTION_CONFIG: Tuple[Tuple[str, str, str], ...] = (
     ("TODAY", "Today", "#ffd5cc"),
     ("THIS WEEK", "This Week", "#ffe8b3"),
@@ -204,6 +289,12 @@ HTML_TEMPLATE = """
             font-size: 1.1rem;
             font-weight: 600;
             color: #333;
+        }
+        .column-subtitle {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #556;
+            margin: 4px 0 0;
         }
         .tasks {
             padding: 16px;
@@ -261,7 +352,16 @@ HTML_TEMPLATE = """
             font-size: 0.85rem;
             margin: 4px 0 0;
         }
-        .scientific-card .next-up {
+        .secondary-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .secondary-row .column {
+            flex: 1 1 320px;
+        }
+        .upcoming-card .next-up {
             font-weight: 600;
             margin: 0 0 8px;
             color: #333;
@@ -279,13 +379,18 @@ HTML_TEMPLATE = """
         .timeline-row:last-child {
             border-bottom: none;
         }
-        .scientific-card[data-expanded="false"] .timeline-row.collapsed-row {
+        .upcoming-card[data-expanded="false"] .timeline-row.collapsed-row {
             display: none;
         }
         .timeline-date {
             font-weight: 600;
             color: #555;
             font-size: 0.95rem;
+        }
+        .timeline-date .weekday {
+            display: block;
+            font-size: 0.8rem;
+            color: #777;
         }
         .timeline-details .task-title {
             margin-bottom: 4px;
@@ -369,89 +474,74 @@ HTML_TEMPLATE = """
         .schedule-card {
             position: relative;
         }
-        .schedule-card .full-mode-text {
-            display: none;
-        }
-        .schedule-card[data-mode="full"] .full-mode-text {
-            display: block;
-        }
-        .schedule-card[data-mode="full"] .week-mode-text {
-            display: none;
-        }
-        .schedule-card[data-mode="week"] .schedule-full-view {
-            display: none;
-        }
-        .schedule-card[data-mode="full"] .schedule-week-view {
-            display: none;
-        }
         .schedule-subtitle {
             margin: 0 0 12px;
             font-weight: 600;
             color: #333;
         }
-        .schedule-month {
+        .date-group {
             margin-bottom: 18px;
         }
-        .schedule-month:last-child {
+        .date-group:last-child {
             margin-bottom: 0;
         }
-        .schedule-month-title {
+        .date-heading {
             font-weight: 600;
             color: #333;
-            margin: 0 0 8px;
+            margin: 0 0 10px;
         }
-        .schedule-event {
-            display: grid;
-            grid-template-columns: 90px 1fr;
+        .schedule-event-row {
+            display: flex;
+            flex-wrap: wrap;
             gap: 12px;
             padding: 10px 0;
             border-bottom: 1px solid #eef0f5;
         }
-        .schedule-event:last-child {
+        .schedule-event-row:last-child {
             border-bottom: none;
         }
-        .schedule-date-block {
-            text-align: left;
-        }
-        .schedule-date-day {
-            display: block;
-            font-weight: 700;
+        .event-time {
+            flex: 0 0 120px;
+            font-weight: 600;
             color: #333;
         }
-        .schedule-date-weekday {
-            display: block;
-            font-size: 0.85rem;
-            color: #777;
+        .event-info {
+            flex: 1 1 240px;
         }
-        .schedule-body .task-title {
+        .event-info .task-title {
             margin-bottom: 4px;
         }
-        .schedule-body .task-meta {
-            margin: 2px 0;
+        .schedule-event-row .task-meta {
+            margin: 4px 0 0;
+        }
+        .schedule-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
         }
         .schedule-badge {
             display: inline-flex;
-            padding: 2px 8px;
+            padding: 2px 10px;
             border-radius: 999px;
             font-size: 0.75rem;
             font-weight: 600;
-            margin-bottom: 6px;
         }
         .schedule-badge-lecture {
             background: #e8f1ff;
             color: #1e5fad;
         }
-        .schedule-badge-workshop-qual {
-            background: #fce8ff;
-            color: #8c2ca3;
-        }
-        .schedule-badge-workshop-quant {
-            background: #fff1d6;
-            color: #a26800;
-        }
         .schedule-badge-workshop {
-            background: #f1f5ff;
-            color: #324d8f;
+            background: #dff6f5;
+            color: #0c6b63;
+        }
+        .schedule-badge-seminar {
+            background: #f4e8ff;
+            color: #7b3fb9;
+        }
+        .schedule-badge-hand-in {
+            background: #e4f7e7;
+            color: #2f7a3d;
         }
         .schedule-badge-exam {
             background: #ffe2e2;
@@ -461,6 +551,282 @@ HTML_TEMPLATE = """
             background: #ececec;
             color: #555;
         }
+        .course-chip {
+            display: inline-flex;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .course-chip-scientific-methods {
+            background: #f0e8ff;
+            color: #6135a7;
+        }
+        .course-chip-accounting-theory {
+            background: #e4f2ff;
+            color: #1c5d99;
+        }
+        .calendar-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .calendar-modal.open {
+            display: flex;
+        }
+        .calendar-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        .calendar-modal.open .calendar-backdrop {
+            opacity: 1;
+        }
+        .calendar-dialog {
+            position: relative;
+            width: min(1000px, 90vw);
+            height: 85vh;
+            background: #fff;
+            border-radius: 24px;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            gap: 16px;
+            transform: scale(0.97);
+            opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        .calendar-modal.open .calendar-dialog {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .calendar-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .calendar-toolbar-title {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .calendar-title {
+            margin: 0;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        .calendar-subtitle-text {
+            margin: 0;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+        .calendar-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .calendar-nav,
+        .calendar-close {
+            border: none;
+            background: #f2f3f7;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .calendar-close {
+            font-size: 1.1rem;
+        }
+        .calendar-nav:hover,
+        .calendar-close:hover {
+            background: #e1e6f5;
+        }
+        .calendar-body {
+            flex: 1;
+            display: flex;
+            gap: 24px;
+            overflow: hidden;
+        }
+        .calendar-main {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+        }
+        .calendar-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            font-weight: 600;
+            color: #8c94a7;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-auto-rows: minmax(90px, 1fr);
+            gap: 8px;
+            flex: 1;
+        }
+        .calendar-cell {
+            background: #f7f8fb;
+            border-radius: 14px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease, border 0.2s ease;
+        }
+        .calendar-cell:hover {
+            background: #eef1ff;
+            transform: translateY(-1px);
+        }
+        .calendar-cell.selected {
+            border: 2px solid #577bff;
+            background: #fff;
+        }
+        .calendar-cell.other-month {
+            opacity: 0.5;
+        }
+        .calendar-date-number {
+            font-weight: 600;
+            color: #2d2f43;
+        }
+        .calendar-cell-events {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .calendar-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .calendar-chip-lecture {
+            background: rgba(80, 123, 255, 0.15);
+            color: #3b5bdb;
+        }
+        .calendar-chip-workshop {
+            background: rgba(163, 114, 255, 0.15);
+            color: #6a42c2;
+        }
+        .calendar-chip-seminar {
+            background: rgba(255, 214, 102, 0.2);
+            color: #a66a00;
+        }
+        .calendar-chip-hand-in {
+            background: rgba(121, 208, 140, 0.2);
+            color: #2f7a3d;
+        }
+        .calendar-chip-exam {
+            background: rgba(255, 163, 163, 0.2);
+            color: #b43333;
+        }
+        .calendar-chip-other {
+            background: rgba(180, 190, 205, 0.3);
+            color: #4f5b6c;
+        }
+        .calendar-chip-more {
+            background: #e0e5f2;
+            color: #5a5f73;
+        }
+        .calendar-detail {
+            flex: 1;
+            background: #f7f8fb;
+            border-radius: 18px;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .detail-date {
+            margin: 0 0 10px;
+            font-weight: 600;
+            color: #2d2f43;
+        }
+        .detail-events {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .detail-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+        }
+        .detail-time {
+            margin: 0;
+            font-weight: 600;
+            color: #384152;
+        }
+        .detail-title {
+            margin: 4px 0;
+            font-weight: 600;
+        }
+        .detail-meta {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #606a7c;
+        }
+        .detail-chip {
+            display: inline-flex;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .detail-chip-lecture {
+            background: rgba(80, 123, 255, 0.15);
+            color: #3b5bdb;
+        }
+        .detail-chip-workshop {
+            background: rgba(163, 114, 255, 0.15);
+            color: #6a42c2;
+        }
+        .detail-chip-seminar {
+            background: rgba(255, 214, 102, 0.2);
+            color: #a66a00;
+        }
+        .detail-chip-hand-in {
+            background: rgba(121, 208, 140, 0.2);
+            color: #2f7a3d;
+        }
+        .detail-chip-exam {
+            background: rgba(255, 163, 163, 0.2);
+            color: #b43333;
+        }
+        .detail-chip-other {
+            background: rgba(180, 190, 205, 0.3);
+            color: #4f5b6c;
+        }
+        .detail-location {
+            margin: 4px 0 0;
+            font-size: 0.85rem;
+            color: #4b5563;
+        }
+        @media (max-width: 900px) {
+            .calendar-body {
+                flex-direction: column;
+            }
+            .calendar-dialog {
+                width: 95vw;
+                height: 90vh;
+            }
+            .calendar-detail {
+                width: 100%;
+                min-height: 180px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -468,7 +834,7 @@ HTML_TEMPLATE = """
     <div class="layout">
         <aside class="sidebar">
             <div class="column">
-                <div class="column-header" style="background-color: #e3f6d0;">Aktuella kurser</div>
+                <div class="column-header" style="background-color: #e3f6d0;">Current courses</div>
                 <div class="tasks">
                     {% if courses %}
                         {% for course in courses %}
@@ -480,7 +846,7 @@ HTML_TEMPLATE = """
                             </div>
                         {% endfor %}
                     {% else %}
-                        <p class="empty">No course data.</p>
+                        <p class="empty">No course data available.</p>
                     {% endif %}
                 </div>
             </div>
@@ -504,209 +870,75 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             {% endfor %}
+        </div>
+        <div class="secondary-row">
             <div class="column">
-                <div class="column-header" style="background-color: #fbe4ff;">Courses</div>
-                <div class="tasks">
-                    {% if canvas_courses %}
-                        {% for course in canvas_courses %}
-                            <div class="course-item">
-                                <p class="course-name">{{ course.name }}</p>
-                                {% if course.code %}
-                                <p class="course-code">{{ course.code }}</p>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="empty">No active courses.</p>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="column">
-                <div class="column-header" style="background-color: #e3ddff;">Scientific Methods – Upcoming</div>
-                {% set total_events = scientific_methods_events|length %}
-                {% set hidden_count = total_events - 3 %}
-                <div class="tasks scientific-card" id="scientific-methods-card" data-expanded="false">
-                    {% if scientific_methods_events %}
-                        {% set next_event = scientific_methods_events[0] %}
-                        <p class="next-up">
-                            Next up: {{ next_event.full_date }}{% if next_event.time_range %}, {{ next_event.time_range }}{% endif %} – {{ next_event.title }}
-                        </p>
-                        <div class="timeline">
-                            {% for event in scientific_methods_events %}
-                                <div class="timeline-row{% if loop.index0 >= 3 %} collapsed-row{% endif %}">
-                                    <div class="timeline-date">{{ event.date_label }}</div>
-                                    <div class="timeline-details">
-                                        <p class="task-title">{{ event.title }}</p>
-                                        <div class="badge-row">
-                                            <span class="badge badge-kind badge-kind-{{ event.kind_class }}">{{ event.kind }}</span>
-                                            {% if event.track %}
-                                            <span class="badge badge-track badge-track-{{ event.track_class }}">{{ event.track }}</span>
-                                            {% endif %}
-                                            {% if event.group %}
-                                            <span class="badge badge-group">{{ event.group }}</span>
-                                            {% endif %}
-                                        </div>
-                                        <p class="task-meta">
-                                            {{ event.full_date }}
-                                            {% if event.time_range %}, {{ event.time_range }}{% endif %}
-                                        </p>
-                                        {% if event.location %}
-                                        <p class="muted">{{ event.location }}</p>
-                                        {% endif %}
-                                        {% if event.submission %}
-                                        <p class="muted">{{ event.submission }}</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                        {% if hidden_count > 0 %}
-                        <button
-                            class="toggle-button"
-                            type="button"
-                            id="scientific-methods-toggle"
-                            data-hidden-count="{{ hidden_count }}"
-                            data-collapsed-label="Show all ({{ hidden_count }} more)"
-                            data-expanded-label="Show less"
-                        >
-                            Show all ({{ hidden_count }} more)
-                        </button>
-                        {% endif %}
-                    {% else %}
-                        <p class="muted">No upcoming items.</p>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="column">
-                <div class="column-header" style="background-color: #dff3ff;">
+                <div class="column-header" style="background-color: #e6f0ff;">
                     <div class="header-flex">
-                        <span>Scientific Methods – Schedule</span>
-                        {% if scientific_methods_schedule_full %}
+                        <div>
+                            <span>Study Schedule – All Courses</span>
+                            <p class="column-subtitle">Lectures, seminars, workshops &amp; exams</p>
+                        </div>
+                        {% if all_courses_schedule_sorted %}
                         <button
                             class="schedule-toggle"
                             type="button"
-                            id="schedule-mode-toggle"
-                            data-week-label="Show full schedule"
-                            data-full-label="Show this week only"
+                            id="open-calendar-btn"
                         >
-                            Show full schedule
+                            Full schedule ▸
                         </button>
                         {% endif %}
                     </div>
                 </div>
-                <div class="tasks schedule-card" id="scientific-schedule-card" data-mode="week">
-                    <p class="schedule-subtitle week-mode-text">
+                <div class="tasks schedule-card" id="all-courses-schedule-card">
+                    <p class="schedule-subtitle">
                         This week:
-                        {% if scientific_methods_schedule_week_range %}
-                            {{ scientific_methods_schedule_week_range.start }} – {{ scientific_methods_schedule_week_range.end }}
+                        {% if study_schedule_week_range %}
+                            {{ study_schedule_week_range.start }} – {{ study_schedule_week_range.end }}
                         {% endif %}
-                        {% if not scientific_methods_schedule_this_week %}
-                            <span class="muted">No scheduled lectures or workshops.</span>
+                        {% if not all_courses_schedule_week_grouped %}
+                            <span class="muted">No scheduled events.</span>
                         {% endif %}
                     </p>
-                    <p class="schedule-subtitle full-mode-text">Full schedule for Scientific Methods</p>
                     <div class="schedule-week-view">
-                        {% if scientific_methods_schedule_this_week %}
-                            {% for event in scientific_methods_schedule_this_week %}
-                                <div class="schedule-event">
-                                    <div class="schedule-date-block">
-                                        <span class="schedule-date-day">{{ event.date_display }}</span>
-                                        <span class="schedule-date-weekday">{{ event.weekday }}</span>
-                                    </div>
-                                    <div class="schedule-body">
-                                        <p class="task-title">{{ event.title }}</p>
-                                        {% if event.type %}
-                                        <span class="schedule-badge schedule-badge-{{ event.badge_class }}">{{ event.type }}</span>
-                                        {% endif %}
-                                        {% if event.time_display or event.location %}
-                                        <p class="task-meta">
-                                            {% if event.time_display %}
-                                                {{ event.time_display }}
-                                            {% endif %}
-                                            {% if event.time_display and event.location %}
-                                                ·
-                                            {% endif %}
-                                            {% if event.location %}
-                                                {{ event.location }}
-                                            {% endif %}
-                                        </p>
-                                        {% endif %}
-                                        {% if event.teacher %}
-                                        <p class="muted">{{ event.teacher }}</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                            <p class="muted">No events this week. Use “Show full schedule” to see the full plan.</p>
-                            {% if scientific_methods_schedule_full %}
-                            <div class="schedule-fallback">
-                                {% for event in scientific_methods_schedule_full[:3] %}
-                                    <div class="schedule-event">
-                                        <div class="schedule-date-block">
-                                            <span class="schedule-date-day">{{ event.date_display }}</span>
-                                            <span class="schedule-date-weekday">{{ event.weekday }}</span>
-                                        </div>
-                                        <div class="schedule-body">
-                                            <p class="task-title">{{ event.title }}</p>
-                                            {% if event.type %}
-                                            <span class="schedule-badge schedule-badge-{{ event.badge_class }}">{{ event.type }}</span>
-                                            {% endif %}
-                                            {% if event.time_display or event.location %}
-                                            <p class="task-meta">
-                                                {% if event.time_display %}
-                                                    {{ event.time_display }}
-                                                {% endif %}
-                                                {% if event.time_display and event.location %}
-                                                    ·
-                                                {% endif %}
-                                                {% if event.location %}
-                                                    {{ event.location }}
-                                                {% endif %}
-                                            </p>
-                                            {% endif %}
-                                            {% if event.teacher %}
-                                            <p class="muted">{{ event.teacher }}</p>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        {% endif %}
-                    </div>
-                    <div class="schedule-full-view">
-                        {% if scientific_methods_schedule_full %}
-                            {% for month_label, events in scientific_methods_schedule_full|groupby('month_label') %}
-                                <div class="schedule-month">
-                                    <p class="schedule-month-title">{{ month_label }}</p>
-                                    {% for event in events %}
-                                        <div class="schedule-event">
-                                            <div class="schedule-date-block">
-                                                <span class="schedule-date-day">{{ event.date_display }}</span>
-                                                <span class="schedule-date-weekday">{{ event.weekday }}</span>
-                                            </div>
-                                            <div class="schedule-body">
+                        {% if all_courses_schedule_week_grouped %}
+                            {% for group in all_courses_schedule_week_grouped %}
+                                <div class="date-group">
+                                    <p class="date-heading">{{ group.label }}</p>
+                                    {% for event in group.events %}
+                                        <div class="schedule-event-row">
+                                            <div class="event-time">{{ event.time_display }}</div>
+                                            <div class="event-info">
                                                 <p class="task-title">{{ event.title }}</p>
-                                                {% if event.type %}
-                                                <span class="schedule-badge schedule-badge-{{ event.badge_class }}">{{ event.type }}</span>
-                                                {% endif %}
-                                                {% if event.time_display or event.location %}
-                                                <p class="task-meta">
-                                                    {% if event.time_display %}
-                                                        {{ event.time_display }}
-                                                    {% endif %}
-                                                    {% if event.time_display and event.location %}
-                                                        ·
-                                                    {% endif %}
-                                                    {% if event.location %}
-                                                        {{ event.location }}
-                                                    {% endif %}
-                                                </p>
-                                                {% endif %}
+                                                <p class="task-meta">{{ event.course_short }}{% if event.location %} · {{ event.location }}{% endif %}</p>
                                                 {% if event.teacher %}
                                                 <p class="muted">{{ event.teacher }}</p>
                                                 {% endif %}
+                                            </div>
+                                            <div class="schedule-badges">
+                                                <span class="schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                        {% elif all_courses_schedule_fallback_grouped %}
+                            <p class="muted">No events this week. Showing upcoming items.</p>
+                            {% for group in all_courses_schedule_fallback_grouped %}
+                                <div class="date-group">
+                                    <p class="date-heading">{{ group.label }}</p>
+                                    {% for event in group.events %}
+                                        <div class="schedule-event-row">
+                                            <div class="event-time">{{ event.time_display }}</div>
+                                            <div class="event-info">
+                                                <p class="task-title">{{ event.title }}</p>
+                                                <p class="task-meta">{{ event.course_short }}{% if event.location %} · {{ event.location }}{% endif %}</p>
+                                                {% if event.teacher %}
+                                                <p class="muted">{{ event.teacher }}</p>
+                                                {% endif %}
+                                            </div>
+                                            <div class="schedule-badges">
+                                                <span class="schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
                                             </div>
                                         </div>
                                     {% endfor %}
@@ -718,34 +950,259 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
             </div>
+            <div class="column">
+                <div class="column-header" style="background-color: #e3ddff;">Upcoming – All Courses</div>
+                <div class="tasks upcoming-card">
+                    {% if upcoming_events_all_courses %}
+                        {% set next_event = upcoming_events_all_courses[0] %}
+                        <p class="next-up">
+                            Next up: {{ next_event.date_label }} ({{ next_event.weekday }}){% if next_event.time_range %}, {{ next_event.time_range }}{% endif %} – {{ next_event.title }}
+                        </p>
+                        <div class="timeline">
+                            {% for event in upcoming_events_all_courses %}
+                                <div class="timeline-row">
+                                    <div class="timeline-date">
+                                        {{ event.date_label }}
+                                        <span class="weekday">{{ event.weekday }}</span>
+                                    </div>
+                                    <div class="timeline-details">
+                                        <p class="task-title">{{ event.title }}</p>
+                                        <div class="badge-row">
+                                            <span class="course-chip course-chip-{{ event.course_class }}">{{ event.course_short }}</span>
+                                            <span class="badge schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
+                                        </div>
+                                        <p class="task-meta">
+                                            {% if event.time_range %}{{ event.time_range }}{% endif %}
+                                            {% if event.time_range and (event.location or event.details) %}
+                                                ·
+                                            {% endif %}
+                                            {% if event.location %}
+                                                {{ event.location }}
+                                            {% elif event.details %}
+                                                {{ event.details }}
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="muted">No upcoming events.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="calendar-modal" id="calendar-modal" aria-hidden="true">
+        <div class="calendar-backdrop" id="calendar-backdrop"></div>
+        <div class="calendar-dialog" role="dialog" aria-modal="true">
+            <div class="calendar-toolbar">
+                <div class="calendar-toolbar-title">
+                    <p class="calendar-title">Study Schedule – Full Calendar</p>
+                    <p class="calendar-subtitle-text" id="calendar-range-label"></p>
+                </div>
+                <div class="calendar-controls">
+                    <button class="calendar-nav" id="calendar-prev" aria-label="Previous month">◀</button>
+                    <button class="calendar-nav" id="calendar-next" aria-label="Next month">▶</button>
+                    <button class="calendar-close" id="calendar-close" aria-label="Close calendar">×</button>
+                </div>
+            </div>
+            <div class="calendar-body">
+                <div class="calendar-main">
+                    <div class="calendar-weekdays">
+                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                </div>
+                <div class="calendar-detail" id="calendar-detail">
+                    <p class="detail-date" id="calendar-day-label">Select a date</p>
+                    <div id="calendar-day-details" class="detail-events"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script>
+    const studyCalendarEvents = {{ all_courses_schedule_sorted | tojson }};
     document.addEventListener("DOMContentLoaded", function () {
-        var card = document.getElementById("scientific-methods-card");
-        var toggle = document.getElementById("scientific-methods-toggle");
-        if (card && toggle) {
-            var collapsedLabel = toggle.dataset.collapsedLabel || toggle.textContent;
-            var expandedLabel = toggle.dataset.expandedLabel || "Show less";
-            toggle.addEventListener("click", function () {
-                var expanded = card.getAttribute("data-expanded") === "true";
-                card.setAttribute("data-expanded", expanded ? "false" : "true");
-                toggle.textContent = expanded ? collapsedLabel : expandedLabel;
+        var openCalendarBtn = document.getElementById("open-calendar-btn");
+        var calendarModal = document.getElementById("calendar-modal");
+        var calendarBackdrop = document.getElementById("calendar-backdrop");
+        var calendarClose = document.getElementById("calendar-close");
+        var calendarGrid = document.getElementById("calendar-grid");
+        var calendarDayLabel = document.getElementById("calendar-day-label");
+        var calendarDayDetails = document.getElementById("calendar-day-details");
+        var calendarRangeLabel = document.getElementById("calendar-range-label");
+        var prevBtn = document.getElementById("calendar-prev");
+        var nextBtn = document.getElementById("calendar-next");
+        var currentMonthDate = new Date();
+        var selectedDate = new Date();
+        var eventsByDate = {};
+        studyCalendarEvents.forEach(function (event) {
+            var key = event.date_iso;
+            if (!eventsByDate[key]) {
+                eventsByDate[key] = [];
+            }
+            eventsByDate[key].push(event);
+        });
+        var todayIso = new Date().toISOString().slice(0, 10);
+        if (eventsByDate[todayIso]) {
+            selectedDate = new Date(todayIso);
+            currentMonthDate = new Date(todayIso);
+        } else if (studyCalendarEvents.length) {
+            selectedDate = new Date(studyCalendarEvents[0].date_iso);
+            currentMonthDate = new Date(studyCalendarEvents[0].date_iso);
+        }
+
+        function openCalendarModal() {
+            calendarModal.classList.add("open");
+            calendarModal.setAttribute("aria-hidden", "false");
+            document.body.style.overflow = "hidden";
+            renderCalendar();
+            selectDate(selectedDate.toISOString().slice(0, 10));
+        }
+
+        function closeCalendarModal() {
+            calendarModal.classList.remove("open");
+            calendarModal.setAttribute("aria-hidden", "true");
+            document.body.style.overflow = "";
+        }
+
+        function changeMonth(offset) {
+            currentMonthDate.setMonth(currentMonthDate.getMonth() + offset);
+            renderCalendar();
+        }
+
+        function formatDateLabel(dateObj) {
+            return dateObj.toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
             });
         }
-        var scheduleCard = document.getElementById("scientific-schedule-card");
-        var scheduleToggle = document.getElementById("schedule-mode-toggle");
-        if (scheduleCard && scheduleToggle) {
-            var weekLabel = scheduleToggle.dataset.weekLabel || "Show full schedule";
-            var fullLabel = scheduleToggle.dataset.fullLabel || "Show this week only";
-            scheduleToggle.textContent = weekLabel;
-            scheduleToggle.addEventListener("click", function () {
-                var mode = scheduleCard.getAttribute("data-mode") === "full" ? "full" : "week";
-                var nextMode = mode === "week" ? "full" : "week";
-                scheduleCard.setAttribute("data-mode", nextMode);
-                scheduleToggle.textContent = nextMode === "week" ? weekLabel : fullLabel;
+
+        function renderCalendar() {
+            var firstDay = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1);
+            var startOffset = (firstDay.getDay() + 6) % 7;
+            var startDate = new Date(firstDay);
+            startDate.setDate(firstDay.getDate() - startOffset);
+            calendarGrid.innerHTML = "";
+            for (var i = 0; i < 42; i++) {
+                (function () {
+                    var cellDate = new Date(startDate);
+                    cellDate.setDate(startDate.getDate() + i);
+                    var iso = cellDate.toISOString().slice(0, 10);
+                    var cell = document.createElement("div");
+                    cell.className = "calendar-cell";
+                    if (cellDate.getMonth() !== currentMonthDate.getMonth()) {
+                        cell.classList.add("other-month");
+                    }
+                    if (iso === selectedDate.toISOString().slice(0, 10)) {
+                        cell.classList.add("selected");
+                    }
+                    var number = document.createElement("div");
+                    number.className = "calendar-date-number";
+                    number.textContent = cellDate.getDate();
+                    cell.appendChild(number);
+                    var events = eventsByDate[iso] || [];
+                    if (events.length) {
+                        var chips = document.createElement("div");
+                        chips.className = "calendar-cell-events";
+                        events.slice(0, 3).forEach(function (item) {
+                            var chip = document.createElement("span");
+                            chip.className = "calendar-chip calendar-chip-" + item.type_badge_class;
+                            chip.textContent = (item.start_time || item.time_display) + " · " + item.type;
+                            chips.appendChild(chip);
+                        });
+                        if (events.length > 3) {
+                            var more = document.createElement("span");
+                            more.className = "calendar-chip calendar-chip-more";
+                            more.textContent = "+" + (events.length - 3) + " more";
+                            chips.appendChild(more);
+                        }
+                        cell.appendChild(chips);
+                    }
+                    cell.addEventListener("click", function () {
+                        selectedDate = cellDate;
+                        selectDate(iso);
+                        renderCalendar();
+                    });
+                    calendarGrid.appendChild(cell);
+                })();
+            }
+            var monthLabel = currentMonthDate.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+            });
+            calendarRangeLabel.textContent = monthLabel;
+        }
+
+        function selectDate(iso) {
+            var dateObj = new Date(iso);
+            calendarDayLabel.textContent = formatDateLabel(dateObj);
+            calendarDayDetails.innerHTML = "";
+            var events = eventsByDate[iso] || [];
+            if (!events.length) {
+                var empty = document.createElement("p");
+                empty.className = "muted";
+                empty.textContent = "No events for this date.";
+                calendarDayDetails.appendChild(empty);
+                return;
+            }
+            events
+                .sort(function (a, b) {
+                    var aKey = (a.start_time || "") + a.title;
+                    var bKey = (b.start_time || "") + b.title;
+                    return aKey.localeCompare(bKey);
+                })
+                .forEach(function (event) {
+                    var card = document.createElement("div");
+                    card.className = "detail-card";
+                    card.innerHTML =
+                        "<p class='detail-time'>" +
+                        (event.start_time ? event.start_time : event.time_display) +
+                        "</p>" +
+                        "<p class='detail-title'>" +
+                        event.title +
+                        "</p>" +
+                        "<p class='detail-meta'>" +
+                        event.course_short +
+                        " · <span class='detail-chip detail-chip-" +
+                        event.type_badge_class +
+                        "'>" +
+                        event.type +
+                        "</span></p>" +
+                        "<p class='detail-location'>" +
+                        (event.location || event.details || "Details TBA") +
+                        "</p>";
+                    calendarDayDetails.appendChild(card);
+                });
+        }
+
+        if (openCalendarBtn) {
+            openCalendarBtn.addEventListener("click", openCalendarModal);
+        }
+        if (calendarBackdrop) {
+            calendarBackdrop.addEventListener("click", closeCalendarModal);
+        }
+        if (calendarClose) {
+            calendarClose.addEventListener("click", closeCalendarModal);
+        }
+        if (prevBtn) {
+            prevBtn.addEventListener("click", function () {
+                changeMonth(-1);
             });
         }
+        if (nextBtn) {
+            nextBtn.addEventListener("click", function () {
+                changeMonth(1);
+            });
+        }
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && calendarModal.classList.contains("open")) {
+                closeCalendarModal();
+            }
+        });
     });
     </script>
 </body>
@@ -1088,6 +1545,8 @@ def _schedule_badge_class(type_value: str) -> str:
         return "lecture"
     if "exam" in lowered:
         return "exam"
+    if "seminar" in lowered:
+        return "seminar"
     if "quantitative" in lowered:
         return "workshop-quant"
     if "qualitative" in lowered:
@@ -1097,69 +1556,159 @@ def _schedule_badge_class(type_value: str) -> str:
     return "other"
 
 
-def _format_scientific_methods_schedule(
-    items: List[Dict[str, str]]
+def _slugify_label(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "item"
+
+
+def _normalize_event_type(type_value: str) -> Tuple[str, str | None, str]:
+    lowered = type_value.lower()
+    track: str | None = None
+    if "workshop" in lowered:
+        if "qualitative" in lowered:
+            track = "Qualitative"
+        elif "quantitative" in lowered:
+            track = "Quantitative"
+        return "Workshop", track, "workshop"
+    if "hand-in" in lowered or "handin" in lowered:
+        return "Hand-in", None, "hand-in"
+    if "seminar" in lowered:
+        return "Seminar", None, "seminar"
+    if "exam" in lowered:
+        return "Exam", None, "exam"
+    if "lecture" in lowered:
+        return "Lecture", None, "lecture"
+    return type_value or "Event", track, "other"
+
+
+def _normalize_course_schedule(
+    entries: List[Dict[str, str]],
+    *,
+    course_name: str,
+    course_short: str,
+    course_slug: str,
 ) -> List[Dict[str, object]]:
-    entries: List[Dict[str, object]] = []
-    for entry in items:
+    normalized: List[Dict[str, object]] = []
+    for index, entry in enumerate(entries):
         date_value = _parse_date_string(entry.get("date"))
         if not date_value:
             continue
         start_time, end_time = _split_time_range(entry.get("time"))
-        time_display = ""
         if start_time and end_time:
             time_display = f"{start_time}\u2013{end_time}"
         elif start_time:
             time_display = start_time
-        type_value = entry.get("type", "")
-        entries.append(
+        else:
+            time_display = entry.get("time", "") or ""
+        type_label, track, type_class = _normalize_event_type(entry.get("type", ""))
+        title_value = entry.get("title", "").strip()
+        slug = _slugify_label(title_value) or f"item-{index}"
+        event_id = f"{course_slug}_{date_value.strftime('%Y%m%d')}_{slug}"
+        normalized.append(
             {
-                "title": entry.get("title", ""),
-                "type": type_value,
-                "time_display": time_display or entry.get("time", ""),
+                "id": event_id,
+                "course": course_name,
+                "course_short": course_short,
+                "course_slug": course_slug,
+                "title": title_value,
+                "type": type_label,
+                "type_badge_class": type_class,
+                "track": track,
+                "time_display": time_display or "Time TBA",
+                "start_time": start_time or "",
+                "end_time": end_time or "",
+                "raw_time": entry.get("time", "") or "",
                 "location": entry.get("location", ""),
+                "details": entry.get("details", ""),
                 "teacher": entry.get("teacher", ""),
-                "date_obj": date_value,
-                "date_display": date_value.strftime("%d %b"),
+                "date": date_value,
+                "date_iso": date_value.isoformat(),
+                "day": date_value.strftime("%d"),
                 "weekday": date_value.strftime("%a"),
-                "month_label": date_value.strftime("%B %Y"),
-                "badge_class": _schedule_badge_class(type_value),
+                "date_heading": f"{date_value.strftime('%d %b')} – {date_value.strftime('%a')}",
                 "time_sort": start_time or "",
             }
         )
-    entries.sort(key=lambda ev: (ev["date_obj"], ev["time_sort"]))
-    return entries
+    return normalized
 
 
-def _copy_schedule_entry_for_template(entry: Dict[str, object]) -> Dict[str, object]:
-    return {
-        "title": entry.get("title", ""),
-        "type": entry.get("type", ""),
-        "time_display": entry.get("time_display", ""),
-        "location": entry.get("location", ""),
-        "teacher": entry.get("teacher", ""),
-        "date_display": entry.get("date_display", ""),
-        "weekday": entry.get("weekday", ""),
-        "month_label": entry.get("month_label", ""),
-        "badge_class": entry.get("badge_class", "other"),
-    }
+def _build_all_courses_schedule() -> List[Dict[str, object]]:
+    events: List[Dict[str, object]] = []
+    events.extend(
+        _normalize_course_schedule(
+            scientific_methods_schedule,
+            course_name="Scientific Methods in Business Research",
+            course_short="Scientific Methods",
+            course_slug="scientific-methods",
+        )
+    )
+    events.extend(
+        _normalize_course_schedule(
+            accounting_theory_schedule,
+            course_name="Accounting Theory – Group B",
+            course_short="Accounting Theory",
+            course_slug="accounting-theory",
+        )
+    )
+    return events
 
 
-def get_scientific_methods_schedule_this_week(
-    entries: List[Dict[str, object]], today: date
+def get_sorted_schedule(events: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    return sorted(events, key=lambda item: (item["date"], item["time_sort"]))
+
+
+def get_schedule_this_week(
+    events: List[Dict[str, object]], today: date
 ) -> List[Dict[str, object]]:
     end_date = today + timedelta(days=7)
     return [
-        _copy_schedule_entry_for_template(entry)
-        for entry in entries
-        if today <= entry["date_obj"] <= end_date
+        item for item in events if isinstance(item["date"], date) and today <= item["date"] <= end_date
     ]
 
 
-def get_scientific_methods_schedule_full(
-    entries: List[Dict[str, object]]
+def get_upcoming_schedule(events: List[Dict[str, object]], today: date) -> List[Dict[str, object]]:
+    return [item for item in events if isinstance(item["date"], date) and item["date"] >= today]
+
+
+def group_schedule_by_date(events: List[Dict[str, object]]) -> List[Dict[str, object]]:
+    grouped: List[Dict[str, object]] = []
+    for label, items in groupby(events, key=lambda event: event["date_heading"]):
+        grouped.append({"label": label, "events": list(items)})
+    return grouped
+
+
+def get_upcoming_events_all_courses(
+    events: List[Dict[str, object]], today: date, limit: int = 8
 ) -> List[Dict[str, object]]:
-    return [_copy_schedule_entry_for_template(entry) for entry in entries]
+    future_events = [
+        event for event in events if isinstance(event["date"], date) and event["date"] >= today
+    ]
+    future_events.sort(key=lambda item: (item["date"], item["time_sort"]))
+    upcoming: List[Dict[str, object]] = []
+    for event in future_events[:limit]:
+        if event["start_time"] and event["end_time"]:
+            time_range = f"{event['start_time']}\u2013{event['end_time']}"
+        elif event["start_time"]:
+            time_range = event["start_time"]
+        else:
+            time_range = event["time_display"]
+        upcoming.append(
+            {
+                "id": event["id"],
+                "title": event["title"],
+                "course": event["course"],
+                "course_short": event["course_short"],
+                "course_class": event["course_slug"],
+                "type": event["type"],
+                "type_badge_class": event["type_badge_class"],
+                "date_label": event["date"].strftime("%d %b"),
+                "weekday": event["date"].strftime("%a"),
+                "time_range": time_range,
+                "location": event["location"],
+                "details": event["details"],
+            }
+        )
+    return upcoming
 
 
 @app.route("/")
@@ -1201,13 +1750,21 @@ def dashboard() -> str:
         if not event_copy.get("submission"):
             event_copy["submission"] = ""
         upcoming_events.append(event_copy)
-    formatted_schedule_entries = _format_scientific_methods_schedule(
-        scientific_methods_schedule
+    all_courses_schedule = _build_all_courses_schedule()
+    all_courses_schedule_sorted = get_sorted_schedule(all_courses_schedule)
+    study_schedule_this_week = get_schedule_this_week(
+        all_courses_schedule_sorted, today
     )
-    schedule_this_week = get_scientific_methods_schedule_this_week(
-        formatted_schedule_entries, today
+    study_schedule_upcoming = get_upcoming_schedule(
+        all_courses_schedule_sorted, today
     )
-    schedule_full = get_scientific_methods_schedule_full(formatted_schedule_entries)
+    upcoming_events_all_courses = get_upcoming_events_all_courses(
+        all_courses_schedule_sorted, today, limit=6
+    )
+    week_grouped = group_schedule_by_date(study_schedule_this_week)
+    fallback_events = study_schedule_upcoming[:5]
+    fallback_grouped = group_schedule_by_date(fallback_events)
+    full_grouped = group_schedule_by_date(all_courses_schedule_sorted)
     week_range = {
         "start": today.strftime("%d %b"),
         "end": (today + timedelta(days=7)).strftime("%d %b %Y"),
@@ -1219,10 +1776,14 @@ def dashboard() -> str:
         courses=courses,
         canvas_courses=canvas_courses,
         scientific_methods_events=upcoming_events,
-        scientific_methods_schedule=scientific_methods_schedule,
-        scientific_methods_schedule_this_week=schedule_this_week,
-        scientific_methods_schedule_full=schedule_full,
-        scientific_methods_schedule_week_range=week_range,
+        all_courses_schedule_sorted=all_courses_schedule_sorted,
+        all_courses_schedule_this_week=study_schedule_this_week,
+        all_courses_schedule_upcoming=study_schedule_upcoming,
+        study_schedule_week_range=week_range,
+        all_courses_schedule_week_grouped=week_grouped,
+        all_courses_schedule_fallback_grouped=fallback_grouped,
+        all_courses_schedule_full_grouped=full_grouped,
+        upcoming_events_all_courses=upcoming_events_all_courses,
     )
 
 
