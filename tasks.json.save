@@ -1,0 +1,59 @@
+[]
+[
+  {
+    "title": "Submit reflection 2",
+    "course": "FEK Uppsala",
+    "due_date": "2025-11-16",
+    "due_time": "23:59",
+    "type": "assignment"
+  },
+  {
+    "title": "Case study notes",
+    "course": "Accounting",
+    "due_date": "2025-11-16",
+    "due_time": "",
+    "type": "reading"
+  },
+  {
+    "title": "Quiz 2",
+    "course": "Corporate Finance",
+    "due_date": "2025-11-20",
+    "due_time": "10:00",
+    "type": "exam"
+  },
+  {
+    "title": "Team presentation slides",
+    "course": "Marketing",
+    "due_date": "2025-11-22",
+    "due_time": "18:00",
+    "type": "assignment"
+  },
+  {
+    "title": "Draft literature review",
+    "course": "Thesis",
+    "due_date": "2025-11-28",
+    "due_time": "",
+    "type": "writing"
+  },
+  {
+    "title": "Research log upload",
+    "course": "Operations",
+    "due_date": "2025-12-03",
+    "due_time": "09:00",
+    "type": "assignment"
+  },
+  {
+    "title": "Strategy final exam",
+    "course": "Strategic Management",
+    "due_date": "2025-12-12",
+    "due_time": "08:00",
+    "type": "exam"
+  },
+  {
+    "title": "WS1: Topic, purpose and design for qualitative studies",
+    "course": "Scientific Methods in Business Research, joint course HT25",
+    "due_date": "2025-11-18",
+    "due_time": "17:00",
+    "type": "assignment"
+  }
+]
