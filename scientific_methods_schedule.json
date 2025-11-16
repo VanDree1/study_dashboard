@@ -1,0 +1,115 @@
+[
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "workshop",
+    "track": "qualitative",
+    "code": "WS2",
+    "title": "Coding & Analysis",
+    "date": "2025-11-21",
+    "time": "10:15–12:00",
+    "location": "Ekonomikum K334",
+    "teacher": "Karim Nasr"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "workshop",
+    "track": "qualitative",
+    "code": "WS3",
+    "title": "Presenting Qualitative Research",
+    "date": "2025-11-28",
+    "time": "08:15–10:00",
+    "location": "Ekonomikum K334",
+    "teacher": "Karim Nasr"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "workshop",
+    "track": "quantitative",
+    "code": "WS4A",
+    "title": "Panel Regression",
+    "date": "2025-12-05",
+    "time": "10:15–12:00",
+    "location": "Ekonomikum K336",
+    "teacher": "Haojun Hu"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "workshop",
+    "track": "quantitative",
+    "code": "WS5A",
+    "title": "Event Study Method",
+    "date": "2025-12-12",
+    "time": "10:15–12:00",
+    "location": "Ekonomikum A138",
+    "teacher": "Joachim Landström"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "workshop",
+    "track": "quantitative",
+    "code": "WS6A",
+    "title": "Portfolio Sorts",
+    "date": "2025-12-19",
+    "time": "10:15–12:00",
+    "location": "Ekonomikum B153",
+    "teacher": "Joachim Landström"
+  },
+
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "code": "WS1",
+    "title": "WS1 hand-in",
+    "deadline": "2025-11-18 17:00",
+    "details": "Submission in Studium"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "code": "WS2",
+    "title": "WS2 hand-in",
+    "deadline": "2025-11-24 17:00",
+    "details": "Submission in Studium"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "code": "WS3",
+    "title": "WS3 hand-in",
+    "deadline": "2025-12-02 17:00",
+    "details": "Submission in Studium"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "title": "R-assignments (1–30)",
+    "deadline": "2025-12-03 23:59",
+    "details": "30 individual R-tasks, upload script + screenshot in Studium"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "code": "WS4A_pre",
+    "title": "WS4A pre-assignment",
+    "deadline": "2025-12-04 08:00",
+    "details": "Online submission (screenshot + script)"
+  },
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "deadline",
+    "code": "WS4A_WS5A_WS6A",
+    "title": "WS4A/WS5A/WS6A hand-ins",
+    "deadline": null,
+    "details": "Deadline: 1 working day after each workshop"
+  },
+
+  {
+    "course": "Scientific Methods in Business Research",
+    "kind": "exam",
+    "title": "Multiple Choice Exam (Individual)",
+    "date": "2026-01-13",
+    "time": "14:00–16:00",
+    "location": "According to Ladok (Inspera online)",
+    "details": "Exam date and room according to Ladok; exam in Inspera."
+  }
+]
