@@ -2765,7 +2765,7 @@ def _group_future_events_by_date(
 
 
 def build_upcoming_preview_events(
-    events: List[Dict[str, object]], today: date, limit: int = 3
+    events: List[Dict[str, object]], today: date, limit: int = 2
 ) -> List[Dict[str, object]]:
     preview_events: List[Dict[str, object]] = []
     count = 0
@@ -2935,7 +2935,7 @@ def dashboard() -> str:
         all_courses_schedule_sorted, today
     )
     upcoming_highlights = build_upcoming_highlights(all_courses_schedule_sorted, max_items=5)
-    upcoming_events_focus = build_upcoming_preview_events(study_schedule_upcoming, today, limit=3)
+    upcoming_events_focus = build_upcoming_preview_events(study_schedule_upcoming, today, limit=2)
     upcoming_events_all = build_upcoming_modal_days(study_schedule_upcoming, today)
     upcoming_events_total = sum(len(day["events"]) for day in upcoming_events_all)
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
