@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import calendar
 from datetime import date, datetime, timedelta
 from itertools import groupby
 from pathlib import Path
@@ -290,12 +291,17 @@ HTML_TEMPLATE = """
         }
         .dashboard-grid {
             display: grid;
-            grid-template-columns: 1.1fr 1.2fr 1.2fr;
+            grid-template-columns: 1.05fr 1.2fr 1.2fr minmax(220px, 260px);
             gap: 24px;
+            align-items: start;
         }
         @media (max-width: 1100px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
+            }
+            .mini-calendar-wrapper {
+                justify-self: stretch;
+                width: 100%;
             }
         }
         .card {
@@ -357,6 +363,119 @@ HTML_TEMPLATE = """
             margin: 4px 0 0;
             font-size: 13px;
             color: var(--text-muted);
+        }
+        .mini-calendar-wrapper {
+            align-self: start;
+            justify-self: end;
+            grid-column: 4;
+        }
+        .mini-calendar-card {
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.07);
+            padding: 18px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            user-select: none;
+            min-width: 220px;
+        }
+        .mini-calendar-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 24px 45px rgba(0, 0, 0, 0.08);
+        }
+        .mini-calendar-card:focus {
+            outline: none;
+        }
+        .mini-calendar-card:focus-visible {
+            box-shadow: 0 0 0 3px rgba(87, 123, 255, 0.4);
+        }
+        .mini-calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .mini-calendar-title {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .mini-calendar-subtitle {
+            margin: 4px 0 0;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .mini-calendar-icon {
+            font-size: 18px;
+            color: #6b7086;
+        }
+        .mini-calendar-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #9aa0b3;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .mini-calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+        .mini-day {
+            border-radius: 12px;
+            padding: 6px 0;
+            text-align: center;
+            min-height: 36px;
+            position: relative;
+            background: rgba(244, 245, 248, 0.9);
+            font-size: 13px;
+            color: #2b2f40;
+        }
+        .mini-day.has-events {
+            background: #ffffff;
+            box-shadow: inset 0 0 0 1px rgba(86, 108, 154, 0.12);
+        }
+        .mini-day.is-today {
+            box-shadow: inset 0 0 0 2px rgba(87, 123, 255, 0.4);
+        }
+        .mini-day.is-placeholder {
+            background: transparent;
+        }
+        .mini-day-number {
+            display: block;
+            font-weight: 600;
+        }
+        .mini-day-dots {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .event-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+        }
+        .event-lecture {
+            background: #8bb4ff;
+        }
+        .event-seminar {
+            background: #c5a6f6;
+        }
+        .event-workshop {
+            background: #7fd5c5;
+        }
+        .event-deadline {
+            background: #f9a8a8;
+        }
+        .event-other {
+            background: #cfd5e4;
         }
         .focus-stack {
             display: flex;
@@ -962,6 +1081,46 @@ HTML_TEMPLATE = """
                     </div>
                 </section>
             </div>
+            <div class="mini-calendar-wrapper">
+                <section
+                    class="card mini-calendar-card"
+                    id="mini-calendar-card"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Open full schedule calendar"
+                >
+                    <div class="mini-calendar-header">
+                        <div>
+                            <p class="mini-calendar-title">{{ mini_calendar.month_label }}</p>
+                            <p class="mini-calendar-subtitle">Tap to view the full calendar</p>
+                        </div>
+                        <span class="mini-calendar-icon">▸</span>
+                    </div>
+                    <div class="mini-calendar-weekdays">
+                        {% for label in mini_calendar.weekday_labels %}
+                        <span>{{ label }}</span>
+                        {% endfor %}
+                    </div>
+                    <div class="mini-calendar-grid">
+                        {% for day in mini_calendar.days %}
+                            {% if day.is_current_month %}
+                            <div class="mini-day{% if day.is_today %} is-today{% endif %}{% if day.has_events %} has-events{% endif %}">
+                                <span class="mini-day-number">{{ day.day_number }}</span>
+                                {% if day.event_types %}
+                                <div class="mini-day-dots">
+                                    {% for type in day.event_types %}
+                                    <span class="event-dot event-{{ type }}"></span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <div class="mini-day is-placeholder"></div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+            </div>
         </div>
     </main>
     <div class="calendar-overlay" id="calendar-overlay" aria-hidden="true">
@@ -1169,6 +1328,16 @@ HTML_TEMPLATE = """
             }
             if (openBtn) {
                 openBtn.addEventListener("click", openOverlay);
+            }
+            var miniCalendarCard = document.getElementById("mini-calendar-card");
+            if (miniCalendarCard) {
+                miniCalendarCard.addEventListener("click", openOverlay);
+                miniCalendarCard.addEventListener("keydown", function (event) {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openOverlay();
+                    }
+                });
             }
             if (closeBtn) {
                 closeBtn.addEventListener("click", closeOverlay);
@@ -1735,6 +1904,75 @@ def build_calendar_events_data(events: List[Dict[str, object]]) -> List[Dict[str
     return calendar_items
 
 
+def _mini_calendar_category(type_value: str) -> str:
+    lowered = type_value.lower()
+    if "lecture" in lowered:
+        return "lecture"
+    if "seminar" in lowered:
+        return "seminar"
+    if "workshop" in lowered:
+        return "workshop"
+    if "hand-in" in lowered or "deadline" in lowered:
+        return "deadline"
+    if "exam" in lowered:
+        return "deadline"
+    return "other"
+
+
+def build_month_event_map(
+    events: List[Dict[str, object]], year: int, month: int
+) -> Dict[str, List[str]]:
+    event_map: Dict[str, List[str]] = {}
+    for event in events:
+        event_date = event.get("date")
+        if not isinstance(event_date, date):
+            continue
+        if event_date.year != year or event_date.month != month:
+            continue
+        type_value = _mini_calendar_category(str(event.get("type_badge_class", "")))
+        iso_key = event_date.isoformat()
+        if iso_key not in event_map:
+            event_map[iso_key] = []
+        if type_value not in event_map[iso_key]:
+            event_map[iso_key].append(type_value)
+    return event_map
+
+
+def build_mini_calendar_data(
+    events: List[Dict[str, object]], today: date
+) -> Dict[str, object]:
+    target_year = today.year
+    target_month = today.month
+    first_day = date(target_year, target_month, 1)
+    _, total_days = calendar.monthrange(target_year, target_month)
+    weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    event_map = build_month_event_map(events, target_year, target_month)
+    days: List[Dict[str, object]] = []
+    leading_blanks = first_day.weekday()
+    for _ in range(leading_blanks):
+        days.append({"is_current_month": False})
+    for day_number in range(1, total_days + 1):
+        current_day = date(target_year, target_month, day_number)
+        iso_key = current_day.isoformat()
+        event_types = sorted(event_map.get(iso_key, []))
+        days.append(
+            {
+                "day_number": day_number,
+                "is_current_month": True,
+                "is_today": current_day == today,
+                "event_types": event_types,
+                "has_events": bool(event_types),
+            }
+        )
+    while len(days) % 7 != 0:
+        days.append({"is_current_month": False})
+    return {
+        "month_label": first_day.strftime("%B %Y"),
+        "weekday_labels": weekday_labels,
+        "days": days,
+    }
+
+
 @app.route("/")
 def dashboard() -> str:
     grouped = build_grouped_tasks()
@@ -1786,6 +2024,7 @@ def dashboard() -> str:
         all_courses_schedule_sorted, today, limit=5
     )
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
+    mini_calendar = build_mini_calendar_data(all_courses_schedule_sorted, today)
     week_grouped = group_schedule_by_date(study_schedule_this_week)
     fallback_events = study_schedule_upcoming[:5]
     fallback_grouped = group_schedule_by_date(fallback_events)
@@ -1810,6 +2049,7 @@ def dashboard() -> str:
         all_courses_schedule_full_grouped=full_grouped,
         next_schedule_events=next_schedule_events,
         calendar_events_data=calendar_events_data,
+        mini_calendar=mini_calendar,
     )
 
 
