@@ -686,11 +686,19 @@ HTML_TEMPLATE = """
             flex-direction: column;
             gap: 0.6rem;
         }
-        .upcoming-item {
+        .upcoming-day-block {
             display: grid;
             grid-template-columns: auto 1fr;
-            gap: 0.75rem;
-            padding: 0.65rem 0.75rem;
+            gap: 0.8rem;
+            padding: 0.45rem 0.3rem;
+        }
+        .upcoming-day-events {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .upcoming-item {
+            padding: 0.55rem 0.65rem;
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.65);
             backdrop-filter: blur(8px);
@@ -872,6 +880,118 @@ HTML_TEMPLATE = """
             display: flex;
             flex-direction: column;
             gap: 20px;
+        }
+        .upcoming-modal-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            z-index: 900;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .upcoming-modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .upcoming-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(6px);
+        }
+        .upcoming-modal-dialog {
+            position: relative;
+            z-index: 1;
+            background: #ffffff;
+            border-radius: 22px;
+            box-shadow: 0 40px 90px rgba(15, 23, 42, 0.25);
+            width: 100%;
+            max-width: 960px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .upcoming-modal-head {
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+        .upcoming-modal-title {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .upcoming-modal-subtitle {
+            margin: 6px 0 0;
+            font-size: 0.9rem;
+            color: rgba(17, 24, 39, 0.65);
+        }
+        .upcoming-modal-close {
+            border: none;
+            background: #eef0f7;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .upcoming-modal-close:hover {
+            background: #e1e5ef;
+        }
+        .upcoming-modal-body {
+            padding: 22px 32px 28px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .upcoming-modal-day-label {
+            margin: 0 0 0.4rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .upcoming-modal-events {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .upcoming-modal-item {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 14px;
+            padding: 0.75rem 0.85rem;
+            background: #ffffff;
+        }
+        .upcoming-modal-item-title {
+            font-weight: 600;
+            margin: 0;
+        }
+        .upcoming-modal-item-meta {
+            margin-top: 0.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: center;
+        }
+        .upcoming-modal-item-time {
+            margin-top: 0.25rem;
+            font-size: 0.85rem;
+            color: rgba(17, 24, 39, 0.75);
+        }
+        .upcoming-modal-item-prep {
+            margin-top: 0.25rem;
+            font-size: 0.78rem;
+            color: rgba(55, 65, 81, 0.75);
         }
         @media (max-width: 900px) {
             .calendar-dialog {
@@ -1169,57 +1289,51 @@ HTML_TEMPLATE = """
                     </div>
                     <div class="card-body">
                         <div class="upcoming-list">
-                            {% if upcoming_highlights and upcoming_highlights|length > 0 %}
-                                {% for event in upcoming_highlights %}
-                                <article class="upcoming-item">
+                            {% if upcoming_card_days and upcoming_card_days|length > 0 %}
+                                {% for day in upcoming_card_days %}
+                                <div class="upcoming-day-block">
                                     <div class="upcoming-date">
-                                        <div class="upcoming-date-day">{{ event.start_dt.strftime("%d") }}</div>
-                                        <div class="upcoming-date-weekday">{{ event.start_dt.strftime("%a") }}</div>
+                                        <div class="upcoming-date-day">{{ day.day_label }}</div>
+                                        <div class="upcoming-date-weekday">{{ day.weekday }}</div>
                                     </div>
-                                    <div class="upcoming-main">
-                                        <div class="upcoming-title-row">
-                                            <h3 class="upcoming-title">{{ event.title }}</h3>
-                                        </div>
-                                        <div class="upcoming-meta-row">
-                                            <span class="badge badge-course">{{ event.course_short or event.course }}</span>
-                                            <span class="badge badge-kind">{{ event.kind }}</span>
-                                            {% if event.location %}
-                                            <span class="upcoming-location">{{ event.location }}</span>
-                                            {% endif %}
-                                        </div>
-                                        <div class="upcoming-time-row">
-                                            <span class="upcoming-time">
-                                                {% if event.has_time %}
-                                                    {{ event.start_dt.strftime("%H:%M") }}
-                                                    {% if event.end_dt %}
-                                                        – {{ event.end_dt.strftime("%H:%M") }}
+                                    <div class="upcoming-day-events">
+                                        {% for event in day.events %}
+                                        <article class="upcoming-item">
+                                            <div class="upcoming-main">
+                                                <div class="upcoming-title-row">
+                                                    <h3 class="upcoming-title">{{ event.title }}</h3>
+                                                </div>
+                                                <div class="upcoming-meta-row">
+                                                    <span class="badge badge-course">{{ event.course_short }}</span>
+                                                    <span class="badge badge-kind">{{ event.kind }}</span>
+                                                    {% if event.location %}
+                                                    <span class="upcoming-location">{{ event.location }}</span>
                                                     {% endif %}
-                                                {% elif event.time_display %}
-                                                    {{ event.time_display }}
-                                                {% else %}
-                                                    Time TBA
+                                                </div>
+                                                <div class="upcoming-time-row">
+                                                    <span class="upcoming-time">{{ event.time_label }}</span>
+                                                </div>
+                                                {% if event.prep_estimate %}
+                                                <div class="upcoming-prep">{{ event.prep_estimate }}</div>
                                                 {% endif %}
-                                            </span>
-                                        </div>
-                                        {% if event.prep_estimate %}
-                                        <div class="upcoming-prep">{{ event.prep_estimate }}</div>
-                                        {% endif %}
+                                            </div>
+                                        </article>
+                                        {% endfor %}
                                     </div>
-                                </article>
+                                </div>
                                 {% endfor %}
                             {% else %}
                                 <p class="upcoming-empty">No upcoming events found.</p>
                             {% endif %}
                         </div>
-                        {% set total_events = upcoming_all_events|length if upcoming_all_events else 0 %}
-                        {% if total_events > 0 %}
+                        {% if upcoming_total_events > 0 %}
                         <div class="upcoming-footer">
                             <button
                                 type="button"
                                 class="link-button upcoming-show-all"
-                                data-open-full-schedule="true"
+                                data-open-upcoming-schedule="true"
                             >
-                                Show all {{ total_events }} events
+                                Show full upcoming schedule ({{ upcoming_total_events }} events)
                             </button>
                         </div>
                         {% endif %}
@@ -1310,6 +1424,47 @@ HTML_TEMPLATE = """
             </div>
         </div>
     </div>
+    <div class="upcoming-modal-overlay" id="upcoming-modal" aria-hidden="true">
+        <div class="upcoming-modal-backdrop" id="upcoming-modal-backdrop"></div>
+        <div class="upcoming-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="upcoming-modal-title">
+            <div class="upcoming-modal-head">
+                <div>
+                    <p class="upcoming-modal-title" id="upcoming-modal-title">Upcoming schedule</p>
+                    <p class="upcoming-modal-subtitle">All upcoming events across your courses</p>
+                </div>
+                <button class="upcoming-modal-close" type="button" id="upcoming-modal-close" aria-label="Close upcoming schedule">×</button>
+            </div>
+            <div class="upcoming-modal-body">
+                {% if upcoming_all_events and upcoming_all_events|length > 0 %}
+                    {% for day in upcoming_all_events %}
+                    <div class="upcoming-modal-day">
+                        <p class="upcoming-modal-day-label">{{ day.full_label }}</p>
+                        <div class="upcoming-modal-events">
+                            {% for event in day.events %}
+                            <article class="upcoming-modal-item">
+                                <div class="upcoming-modal-item-title">{{ event.title }}</div>
+                                <div class="upcoming-modal-item-meta">
+                                    <span class="badge badge-course">{{ event.course_short }}</span>
+                                    <span class="badge badge-kind">{{ event.kind }}</span>
+                                    {% if event.location %}
+                                    <span class="upcoming-location">{{ event.location }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="upcoming-modal-item-time">{{ event.time_label }}</div>
+                                {% if event.prep_estimate %}
+                                <div class="upcoming-modal-item-prep">{{ event.prep_estimate }}</div>
+                                {% endif %}
+                            </article>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="upcoming-empty">No upcoming events found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             var scheduleEvents = {{ calendar_events_data|tojson }};
@@ -1345,6 +1500,10 @@ HTML_TEMPLATE = """
             var backdrop = document.getElementById("calendar-backdrop");
             var navButtons = document.querySelectorAll("[data-calendar-nav]");
             var fullScheduleButtons = document.querySelectorAll("[data-open-full-schedule='true']");
+            var upcomingModal = document.getElementById("upcoming-modal");
+            var upcomingModalBackdrop = document.getElementById("upcoming-modal-backdrop");
+            var upcomingModalClose = document.getElementById("upcoming-modal-close");
+            var upcomingModalButtons = document.querySelectorAll("[data-open-upcoming-schedule='true']");
 
             var calendarState = {
                 currentYear: initialYear,
@@ -1775,6 +1934,39 @@ HTML_TEMPLATE = """
                 });
             });
 
+            function openUpcomingModal() {
+                if (!upcomingModal) {
+                    return;
+                }
+                upcomingModal.classList.add("open");
+                upcomingModal.setAttribute("aria-hidden", "false");
+                document.body.style.overflow = "hidden";
+            }
+
+            function closeUpcomingModal() {
+                if (!upcomingModal) {
+                    return;
+                }
+                upcomingModal.classList.remove("open");
+                upcomingModal.setAttribute("aria-hidden", "true");
+                document.body.style.overflow = "";
+            }
+
+            upcomingModalButtons.forEach(function (button) {
+                button.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openUpcomingModal();
+                });
+            });
+
+            if (upcomingModalClose) {
+                upcomingModalClose.addEventListener("click", closeUpcomingModal);
+            }
+            if (upcomingModalBackdrop) {
+                upcomingModalBackdrop.addEventListener("click", closeUpcomingModal);
+            }
+
             navButtons.forEach(function (button) {
                 button.addEventListener("click", function () {
                     var direction = button.getAttribute("data-calendar-nav");
@@ -1790,8 +1982,13 @@ HTML_TEMPLATE = """
                 backdrop.addEventListener("click", closeOverlay);
             }
             document.addEventListener("keydown", function (event) {
-                if (event.key === "Escape" && overlay && overlay.classList.contains("open")) {
-                    closeOverlay();
+                if (event.key === "Escape") {
+                    if (overlay && overlay.classList.contains("open")) {
+                        closeOverlay();
+                    }
+                    if (upcomingModal && upcomingModal.classList.contains("open")) {
+                        closeUpcomingModal();
+                    }
                 }
             });
 
@@ -2418,6 +2615,75 @@ def build_upcoming_highlights(
     return highlights[:max_items]
 
 
+def _format_event_display(event: Dict[str, object]) -> Dict[str, object]:
+    start_dt = event.get("start_dt")
+    end_dt = event.get("end_dt")
+    has_time = bool(event.get("has_time"))
+    if isinstance(start_dt, datetime) and has_time:
+        time_label = start_dt.strftime("%H:%M")
+        if isinstance(end_dt, datetime):
+            time_label = f"{time_label} – {end_dt.strftime('%H:%M')}"
+    else:
+        time_label = str(event.get("time_display") or "Time TBA")
+    display = {
+        "id": event.get("id"),
+        "title": event.get("title"),
+        "course": event.get("course"),
+        "course_short": event.get("course_short") or event.get("course"),
+        "kind": event.get("kind") or event.get("type"),
+        "kind_badge_class": event.get("type_badge_class") or "other",
+        "location": event.get("location") or "",
+        "time_label": time_label,
+        "prep_estimate": _estimate_prep_text(event),
+        "has_time": has_time,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+    }
+    return display
+
+
+def _group_future_events_by_date(
+    events: List[Dict[str, object]], today: date, *, max_days: int | None = None
+) -> List[Dict[str, object]]:
+    grouped: List[Dict[str, object]] = []
+    day_lookup: Dict[str, Dict[str, object]] = {}
+    for event in events:
+        start_dt = event.get("start_dt")
+        if not isinstance(start_dt, datetime):
+            continue
+        event_date = start_dt.date()
+        if event_date < today:
+            continue
+        date_key = event_date.isoformat()
+        if date_key not in day_lookup:
+            if max_days is not None and len(grouped) >= max_days:
+                break
+            day_info = {
+                "date": event_date,
+                "date_iso": date_key,
+                "day_label": event_date.strftime("%d"),
+                "weekday": event_date.strftime("%a"),
+                "full_label": event_date.strftime("%A, %d %B %Y"),
+                "events": [],
+            }
+            grouped.append(day_info)
+            day_lookup[date_key] = day_info
+        day_lookup[date_key]["events"].append(_format_event_display(event))
+    return grouped
+
+
+def build_upcoming_card_days(
+    events: List[Dict[str, object]], today: date, max_days: int = 3
+) -> List[Dict[str, object]]:
+    return _group_future_events_by_date(events, today, max_days=max_days)
+
+
+def build_upcoming_modal_days(
+    events: List[Dict[str, object]], today: date
+) -> List[Dict[str, object]]:
+    return _group_future_events_by_date(events, today, max_days=None)
+
+
 def _mini_calendar_category(type_value: str) -> str:
     lowered = type_value.lower()
     if "lecture" in lowered:
@@ -2569,6 +2835,9 @@ def dashboard() -> str:
         all_courses_schedule_sorted, today
     )
     upcoming_highlights = build_upcoming_highlights(all_courses_schedule_sorted, max_items=5)
+    upcoming_card_days = build_upcoming_card_days(study_schedule_upcoming, today, max_days=3)
+    upcoming_all_events = build_upcoming_modal_days(study_schedule_upcoming, today)
+    upcoming_total_events = sum(len(day["events"]) for day in upcoming_all_events)
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
     mini_month_param = request.args.get("mini_month", "")
     target_year: int | None = None
@@ -2606,7 +2875,9 @@ def dashboard() -> str:
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
         upcoming_highlights=upcoming_highlights,
-        upcoming_all_events=study_schedule_upcoming,
+        upcoming_card_days=upcoming_card_days,
+        upcoming_all_events=upcoming_all_events,
+        upcoming_total_events=upcoming_total_events,
         calendar_events_data=calendar_events_data,
         mini_calendar=mini_calendar,
         today_iso=today.isoformat(),
