@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import date, datetime, timedelta
 from itertools import groupby
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from flask import Flask, render_template_string
+from flask import Flask, jsonify, render_template_string, request
+from openai import OpenAI
 
 from study_dashboard import (
     GROUP_TITLES,
@@ -23,6 +25,7 @@ from study_dashboard import (
 from courses_client import get_active_courses
 
 app = Flask(__name__)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 COURSES_FILE = Path(__file__).with_name("canvas_courses.json")
 SCIENTIFIC_SCHEDULE_FILE = Path(__file__).with_name("scientific_methods_schedule.json")
 
@@ -247,460 +250,479 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8" />
     <title>Study Dashboard</title>
     <style>
+        :root {
+            --bg: #f5f5f7;
+            --text-strong: #111111;
+            --text-body: #333333;
+            --text-muted: #777777;
+            --card-radius: 18px;
+        }
+        * {
+            box-sizing: border-box;
+        }
         body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #f4f6fb;
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
             margin: 0;
-            padding: 20px;
-            color: #222;
+            color: var(--text-body);
+            line-height: 1.6;
         }
-        h1 {
+        .dashboard-shell {
+            max-width: 1280px;
+            margin: 40px auto 80px auto;
+            padding: 0 24px;
+        }
+        .page-header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 32px;
         }
-        .layout {
+        .page-title {
+            font-size: clamp(32px, 3vw, 36px);
+            font-weight: 700;
+            color: var(--text-strong);
+            margin: 0;
+        }
+        .page-subtitle {
+            margin: 10px 0 0;
+            font-size: 15px;
+            color: #555;
+            font-weight: 500;
+        }
+        .dashboard-grid {
             display: grid;
-            grid-template-columns: minmax(260px, 320px) 1fr;
-            gap: 20px;
-            align-items: start;
+            grid-template-columns: 1.1fr 1.2fr 1.2fr;
+            gap: 24px;
         }
-        @media (max-width: 768px) {
-            .layout {
+        @media (max-width: 1100px) {
+            .dashboard-grid {
                 grid-template-columns: 1fr;
             }
         }
-        .columns {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-        .sidebar .column {
-            flex: none;
-        }
-        .column {
-            flex: 1 1 280px;
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        .card {
+            background: #ffffff;
+            border-radius: var(--card-radius);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.06);
             overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
-        .column-header {
-            padding: 16px;
-            font-size: 1.1rem;
+        .card + .card {
+            margin-top: 24px;
+        }
+        .card-header {
+            padding: 20px 24px;
+            background: #f3f4f6;
+        }
+        .card-header.header-soft-sage { background: linear-gradient(135deg, #edf5e2, #e3f0d6); }
+        .card-header.header-soft-sky { background: linear-gradient(135deg, #ebf2ff, #dfe9ff); }
+        .card-header.header-soft-peach { background: linear-gradient(135deg, #ffe9e1, #ffd9d0); }
+        .card-header.header-soft-sun { background: linear-gradient(135deg, #fff1d7, #ffe6bf); }
+        .card-header.header-soft-lilac { background: linear-gradient(135deg, #f4eeff, #e8e0fb); }
+        .card-header.header-soft-slate { background: linear-gradient(135deg, #eceff5, #e2e6ef); }
+        .card-title {
+            margin: 0;
+            font-size: 19px;
             font-weight: 600;
-            color: #333;
+            color: var(--text-strong);
         }
-        .column-subtitle {
-            font-size: 0.9rem;
+        .card-subtitle {
+            margin: 8px 0 0;
+            font-size: 14px;
             font-weight: 500;
-            color: #556;
+            color: #555;
+        }
+        .card-body {
+            padding: 24px;
+        }
+        .course-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .course-row {
+            padding-bottom: 12px;
+            border-bottom: 1px solid #f0f0f2;
+        }
+        .course-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .course-name {
+            margin: 0;
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text-strong);
+        }
+        .course-code {
             margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
         }
-        .tasks {
+        .focus-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .section-subtitle {
+            font-size: 14px;
+            color: #555;
+            font-weight: 500;
+            margin: 6px 0 0;
+        }
+        .task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .task-item {
+            border: 1px solid #ececf5;
+            border-radius: 14px;
             padding: 16px;
-        }
-        .task-card {
-            border: 1px solid #e1e5ee;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 12px;
-            background: #fafbff;
-        }
-        .task-card:last-child {
-            margin-bottom: 0;
+            background: #fafbfe;
         }
         .task-title {
-            font-weight: 600;
             margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-strong);
         }
         .task-meta {
             margin: 6px 0 0;
-            font-size: 0.95rem;
-            color: #555;
+            font-size: 13px;
+            color: var(--text-muted);
         }
-        .task-meta .due-inline {
-            font-size: 0.85rem;
-            color: #777;
-            margin-left: 4px;
-        }
-        .task-course {
-            font-size: 0.9rem;
-            color: #444;
-        }
-        .course-item {
-            padding: 10px;
-            border-bottom: 1px solid #ecf0f8;
-        }
-        .course-item:last-child {
-            border-bottom: none;
-        }
-        .course-name {
-            font-weight: 600;
-            margin: 0;
-        }
-        .course-code {
-            color: #555;
-            font-size: 0.9rem;
-            margin: 2px 0 0;
-        }
-        .empty {
-            color: #999;
-            font-style: italic;
-        }
-        .muted {
-            color: #666;
-            font-size: 0.85rem;
+        .task-details {
             margin: 4px 0 0;
+            font-size: 14px;
+            color: var(--text-body);
         }
-        .secondary-row {
+        .task-empty {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .highlight-task {
+            background: linear-gradient(135deg, #fff5e8, #ffe8d7);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 170, 125, 0.4);
+        }
+        .highlight-title {
+            margin: 6px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .highlight-due {
+            margin: 0;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .highlight-note {
+            margin: 8px 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+        }
+        .course-pill {
+            background: #eef1f6;
+            color: #3a4a6b;
+        }
+        .course-pill[data-course*="Accounting"] {
+            background: #e0edff;
+            color: #2250c4;
+        }
+        .course-pill[data-course*="Scientific"] {
+            background: #f2e7ff;
+            color: #6b32c4;
+        }
+        .course-pill[data-course*="Research"] {
+            background: #f2e7ff;
+            color: #6b32c4;
+        }
+        .schedule-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        .schedule-card-body {
+            padding-top: 16px;
+        }
+        .full-schedule-btn {
+            border: none;
+            background: #edf1ff;
+            color: #1f3fb0;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+            white-space: nowrap;
+        }
+        .full-schedule-btn:hover {
+            background: #dfe6ff;
+            transform: translateY(-1px);
+        }
+        .schedule-list {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            max-height: 320px;
+            overflow: hidden;
+            position: relative;
+            padding-bottom: 24px;
+        }
+        .schedule-list::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 60px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff);
+            pointer-events: none;
+        }
+        .schedule-list[data-compact="true"] {
+            max-height: none;
+            padding-bottom: 0;
+        }
+        .schedule-list[data-compact="true"]::after {
+            display: none;
+        }
+        .schedule-row {
+            display: flex;
+            gap: 20px;
+            justify-content: space-between;
+            border-bottom: 1px solid #f0f0f4;
+            padding-bottom: 14px;
+        }
+        .schedule-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .schedule-main {
+            flex: 1;
+            min-width: 0;
+        }
+        .schedule-time {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4a5568;
+            letter-spacing: 0.02em;
+        }
+        .schedule-title {
+            margin: 4px 0 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .schedule-location {
+            margin: 6px 0 0;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .schedule-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 140px;
+            align-items: flex-end;
+        }
+        .type-pill {
+            background: #f1f2f4;
+            color: #4b5563;
+            margin-left: 8px;
+        }
+        .type-pill.type-lecture { background: #e5edff; color: #2d4ab8; }
+        .type-pill.type-workshop { background: #f4e9ff; color: #6b32c4; }
+        .type-pill.type-seminar { background: #fff1d6; color: #9a6400; }
+        .type-pill.type-exam { background: #ffe1e1; color: #b42318; }
+        .type-pill.type-hand-in { background: #e7f6ec; color: #1e7a46; }
+        .type-pill.type-workshop-qual { background: #f4e9ff; color: #6b32c4; }
+        .type-pill.type-workshop-quant { background: #e6f5ff; color: #0369a1; }
+        .type-pill.type-other { background: #f1f2f4; color: #4b5563; }
+        .task-badges {
             display: flex;
             flex-wrap: wrap;
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .secondary-row .column {
-            flex: 1 1 320px;
-        }
-        .upcoming-card .next-up {
-            font-weight: 600;
-            margin: 0 0 8px;
-            color: #333;
-        }
-        .timeline {
+            gap: 6px;
             margin-top: 8px;
         }
-        .timeline-row {
-            display: grid;
-            grid-template-columns: 90px 1fr;
+        .assistant-chat {
+            display: flex;
+            flex-direction: column;
             gap: 12px;
-            padding: 12px 0;
-            border-bottom: 1px solid #eef0f5;
         }
-        .timeline-row:last-child {
-            border-bottom: none;
+        .chat-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.5;
         }
-        .upcoming-card[data-expanded="false"] .timeline-row.collapsed-row {
-            display: none;
+        .bubble-user {
+            align-self: flex-end;
+            background: #e9efff;
+            color: #1e3a8a;
         }
-        .timeline-date {
-            font-weight: 600;
-            color: #555;
-            font-size: 0.95rem;
+        .bubble-ai {
+            align-self: flex-start;
+            background: #f3f4f6;
+            color: var(--text-body);
         }
-        .timeline-date .weekday {
-            display: block;
-            font-size: 0.8rem;
-            color: #777;
-        }
-        .timeline-details .task-title {
-            margin-bottom: 4px;
-        }
-        .badge-row {
+        .assistant-input {
+            border: 1px solid #e1e4ec;
+            border-radius: 14px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: var(--text-muted);
             display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin: 4px 0 6px;
-        }
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .badge-kind-workshop {
-            background: #ede9fe;
-            color: #5b38a4;
-        }
-        .badge-kind-hand-in {
-            background: #e5f7ea;
-            color: #297347;
-        }
-        .badge-kind-exam {
-            background: #fde4e4;
-            color: #b03030;
-        }
-        .badge-track-qualitative {
-            background: #e3f2ff;
-            color: #215b8a;
-        }
-        .badge-track-quantitative {
-            background: #fff2cc;
-            color: #927200;
-        }
-        .badge-track-both {
-            background: #f0f0f0;
-            color: #555;
-        }
-        .badge-group {
-            background: #f3e5f5;
-            color: #7b1fa2;
-        }
-        .toggle-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-top: 12px;
-            padding: 8px 14px;
-            border: none;
-            border-radius: 999px;
-            background: #eef0fb;
-            color: #333;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .toggle-button:hover {
-            background: #dfe2f6;
-        }
-        .schedule-toggle {
-            padding: 4px 12px;
-            border-radius: 999px;
-            border: none;
-            background: #eef5ff;
-            color: #274c77;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 0.9rem;
-        }
-        .schedule-toggle:hover {
-            background: #d7e9ff;
-        }
-        .header-flex {
-            display: flex;
-            align-items: center;
             justify-content: space-between;
-            gap: 12px;
-        }
-        .schedule-card {
-            position: relative;
-        }
-        .schedule-subtitle {
-            margin: 0 0 12px;
-            font-weight: 600;
-            color: #333;
-        }
-        .date-group {
-            margin-bottom: 18px;
-        }
-        .date-group:last-child {
-            margin-bottom: 0;
-        }
-        .date-heading {
-            font-weight: 600;
-            color: #333;
-            margin: 0 0 10px;
-        }
-        .schedule-event-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding: 10px 0;
-            border-bottom: 1px solid #eef0f5;
-        }
-        .schedule-event-row:last-child {
-            border-bottom: none;
-        }
-        .event-time {
-            flex: 0 0 120px;
-            font-weight: 600;
-            color: #333;
-        }
-        .event-info {
-            flex: 1 1 240px;
-        }
-        .event-info .task-title {
-            margin-bottom: 4px;
-        }
-        .schedule-event-row .task-meta {
-            margin: 4px 0 0;
-        }
-        .schedule-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
             align-items: center;
         }
-        .schedule-badge {
-            display: inline-flex;
-            padding: 2px 10px;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 600;
+        .placeholder {
+            color: var(--text-muted);
+            font-size: 14px;
         }
-        .schedule-badge-lecture {
-            background: #e8f1ff;
-            color: #1e5fad;
-        }
-        .schedule-badge-workshop {
-            background: #dff6f5;
-            color: #0c6b63;
-        }
-        .schedule-badge-seminar {
-            background: #f4e8ff;
-            color: #7b3fb9;
-        }
-        .schedule-badge-hand-in {
-            background: #e4f7e7;
-            color: #2f7a3d;
-        }
-        .schedule-badge-exam {
-            background: #ffe2e2;
-            color: #b13232;
-        }
-        .schedule-badge-other {
-            background: #ececec;
-            color: #555;
-        }
-        .course-chip {
-            display: inline-flex;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .course-chip-scientific-methods {
-            background: #f0e8ff;
-            color: #6135a7;
-        }
-        .course-chip-accounting-theory {
-            background: #e4f2ff;
-            color: #1c5d99;
-        }
-        .calendar-modal {
+        .calendar-overlay {
             position: fixed;
             inset: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .calendar-modal.open {
             display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 20px;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .calendar-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
         }
         .calendar-backdrop {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, 0.3);
-            opacity: 0;
-            transition: opacity 0.25s ease;
-        }
-        .calendar-modal.open .calendar-backdrop {
-            opacity: 1;
+            background: rgba(17, 18, 23, 0.55);
+            backdrop-filter: blur(6px);
         }
         .calendar-dialog {
             position: relative;
-            width: min(1000px, 90vw);
-            height: 85vh;
-            background: #fff;
+            z-index: 1;
+            background: #ffffff;
             border-radius: 24px;
-            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.25);
+            box-shadow: 0 40px 90px rgba(15, 23, 42, 0.2);
+            width: 100%;
+            max-width: 1100px;
+            max-height: 90vh;
+            padding: 32px;
             display: flex;
             flex-direction: column;
-            padding: 24px;
-            gap: 16px;
-            transform: scale(0.97);
-            opacity: 0;
-            transition: transform 0.3s ease, opacity 0.3s ease;
+            gap: 20px;
         }
-        .calendar-modal.open .calendar-dialog {
-            transform: scale(1);
-            opacity: 1;
+        @media (max-width: 900px) {
+            .calendar-dialog {
+                padding: 24px;
+                border-radius: 20px;
+            }
         }
-        .calendar-toolbar {
+        .calendar-head {
             display: flex;
-            align-items: center;
             justify-content: space-between;
-        }
-        .calendar-toolbar-title {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
+            align-items: center;
+            gap: 16px;
         }
         .calendar-title {
             margin: 0;
-            font-size: 1.3rem;
+            font-size: 24px;
             font-weight: 600;
+            color: var(--text-strong);
         }
-        .calendar-subtitle-text {
-            margin: 0;
-            color: #6b7280;
-            font-size: 0.9rem;
+        .calendar-month {
+            margin: 6px 0 0;
+            color: #555;
+            font-size: 16px;
         }
         .calendar-controls {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        .calendar-nav,
-        .calendar-close {
+        .calendar-nav-btn,
+        .calendar-close-btn {
             border: none;
-            background: #f2f3f7;
+            background: #eef1f7;
             border-radius: 999px;
-            padding: 6px 14px;
-            font-size: 0.95rem;
+            width: 38px;
+            height: 38px;
+            font-size: 18px;
             font-weight: 600;
+            color: #111;
             cursor: pointer;
             transition: background 0.2s ease;
         }
-        .calendar-close {
-            font-size: 1.1rem;
-        }
-        .calendar-nav:hover,
-        .calendar-close:hover {
-            background: #e1e6f5;
-        }
-        .calendar-body {
-            flex: 1;
-            display: flex;
-            gap: 24px;
-            overflow: hidden;
-        }
-        .calendar-main {
-            flex: 2;
-            display: flex;
-            flex-direction: column;
+        .calendar-nav-btn:hover,
+        .calendar-close-btn:hover {
+            background: #e1e5ef;
         }
         .calendar-weekdays {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            font-weight: 600;
-            color: #8c94a7;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #8d94a3;
             text-align: center;
-            margin-bottom: 8px;
         }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            grid-auto-rows: minmax(90px, 1fr);
-            gap: 8px;
-            flex: 1;
+            grid-auto-rows: minmax(110px, 1fr);
+            gap: 10px;
+            overflow-y: auto;
         }
         .calendar-cell {
-            background: #f7f8fb;
-            border-radius: 14px;
-            padding: 10px;
+            border: none;
+            background: #f6f7fb;
+            border-radius: 18px;
+            padding: 12px;
+            text-align: left;
+            cursor: pointer;
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            cursor: pointer;
-            transition: background 0.2s ease, transform 0.2s ease, border 0.2s ease;
+            gap: 8px;
+            transition: background 0.2s ease, transform 0.2s ease;
         }
-        .calendar-cell:hover {
-            background: #eef1ff;
-            transform: translateY(-1px);
-        }
-        .calendar-cell.selected {
-            border: 2px solid #577bff;
-            background: #fff;
+        .calendar-cell:focus {
+            outline: 2px solid #6d7cff;
+            outline-offset: 2px;
         }
         .calendar-cell.other-month {
-            opacity: 0.5;
+            opacity: 0.4;
         }
-        .calendar-date-number {
+        .calendar-cell.has-events {
+            background: #ffffff;
+        }
+        .calendar-cell.selected {
+            box-shadow: 0 0 0 2px #7a89ff;
+            background: #ffffff;
+        }
+        .calendar-date {
             font-weight: 600;
-            color: #2d2f43;
+            color: var(--text-strong);
+            font-size: 14px;
         }
-        .calendar-cell-events {
+        .calendar-events {
             display: flex;
             flex-direction: column;
             gap: 4px;
@@ -708,505 +730,481 @@ HTML_TEMPLATE = """
         .calendar-chip {
             display: inline-flex;
             align-items: center;
-            padding: 1px 6px;
-            border-radius: 999px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-        .calendar-chip-lecture {
-            background: rgba(80, 123, 255, 0.15);
-            color: #3b5bdb;
-        }
-        .calendar-chip-workshop {
-            background: rgba(163, 114, 255, 0.15);
-            color: #6a42c2;
-        }
-        .calendar-chip-seminar {
-            background: rgba(255, 214, 102, 0.2);
-            color: #a66a00;
-        }
-        .calendar-chip-hand-in {
-            background: rgba(121, 208, 140, 0.2);
-            color: #2f7a3d;
-        }
-        .calendar-chip-exam {
-            background: rgba(255, 163, 163, 0.2);
-            color: #b43333;
-        }
-        .calendar-chip-other {
-            background: rgba(180, 190, 205, 0.3);
-            color: #4f5b6c;
-        }
-        .calendar-chip-more {
-            background: #e0e5f2;
-            color: #5a5f73;
-        }
-        .calendar-detail {
-            flex: 1;
-            background: #f7f8fb;
-            border-radius: 18px;
-            padding: 16px;
-            overflow-y: auto;
-        }
-        .detail-date {
-            margin: 0 0 10px;
-            font-weight: 600;
-            color: #2d2f43;
-        }
-        .detail-events {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .detail-card {
-            background: #fff;
-            border-radius: 12px;
-            padding: 12px;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-        }
-        .detail-time {
-            margin: 0;
-            font-weight: 600;
-            color: #384152;
-        }
-        .detail-title {
-            margin: 4px 0;
-            font-weight: 600;
-        }
-        .detail-meta {
-            margin: 0;
-            font-size: 0.85rem;
-            color: #606a7c;
-        }
-        .detail-chip {
-            display: inline-flex;
             padding: 2px 8px;
             border-radius: 999px;
-            font-size: 0.7rem;
+            font-size: 11px;
             font-weight: 600;
         }
-        .detail-chip-lecture {
-            background: rgba(80, 123, 255, 0.15);
-            color: #3b5bdb;
+        .calendar-chip.more-chip {
+            background: transparent;
+            color: #6b7280;
         }
-        .detail-chip-workshop {
-            background: rgba(163, 114, 255, 0.15);
-            color: #6a42c2;
+        .calendar-chip.chip-lecture { background: #e0e9ff; color: #1e3a8a; }
+        .calendar-chip.chip-workshop { background: #f0e7ff; color: #6b32c4; }
+        .calendar-chip.chip-workshop-qual { background: #f0e7ff; color: #6b32c4; }
+        .calendar-chip.chip-workshop-quant { background: #e2f2ff; color: #0f4f71; }
+        .calendar-chip.chip-hand-in { background: #e7f6ec; color: #1e7a46; }
+        .calendar-chip.chip-seminar { background: #fff2d9; color: #935c00; }
+        .calendar-chip.chip-exam { background: #ffe1e1; color: #b42318; }
+        .calendar-chip.chip-other { background: #eef1f7; color: #4b5563; }
+        .calendar-detail {
+            background: #f7f8fb;
+            border-radius: 20px;
+            padding: 20px;
+            max-height: 220px;
+            overflow-y: auto;
         }
-        .detail-chip-seminar {
-            background: rgba(255, 214, 102, 0.2);
-            color: #a66a00;
+        .calendar-detail-heading {
+            margin: 0 0 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-strong);
         }
-        .detail-chip-hand-in {
-            background: rgba(121, 208, 140, 0.2);
-            color: #2f7a3d;
+        .calendar-detail-empty {
+            margin: 0;
+            font-size: 13px;
+            color: #7b8194;
         }
-        .detail-chip-exam {
-            background: rgba(255, 163, 163, 0.2);
-            color: #b43333;
+        .calendar-detail-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        .detail-chip-other {
-            background: rgba(180, 190, 205, 0.3);
-            color: #4f5b6c;
+        .calendar-detail-item {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 12px 14px;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
         }
-        .detail-location {
+        .calendar-detail-time {
+            margin: 0;
+            font-weight: 600;
+            font-size: 14px;
+            color: #374151;
+        }
+        .calendar-detail-title {
+            margin: 6px 0 0;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .calendar-detail-meta {
             margin: 4px 0 0;
-            font-size: 0.85rem;
-            color: #4b5563;
+            font-size: 13px;
+            color: #6b7280;
         }
-        @media (max-width: 900px) {
-            .calendar-body {
+        @media (max-width: 600px) {
+            .card-body {
+                padding: 20px;
+            }
+            .schedule-row {
                 flex-direction: column;
             }
-            .calendar-dialog {
-                width: 95vw;
-                height: 90vh;
-            }
-            .calendar-detail {
+            .schedule-meta {
+                align-items: flex-start;
+                min-width: auto;
                 width: 100%;
-                min-height: 180px;
             }
         }
     </style>
 </head>
 <body>
-    <h1>Study Dashboard</h1>
-    <div class="layout">
-        <aside class="sidebar">
-            <div class="column">
-                <div class="column-header" style="background-color: #e3f6d0;">Current courses</div>
-                <div class="tasks">
-                    {% if courses %}
-                        {% for course in courses %}
-                            <div class="course-item">
+    <main class="dashboard-shell">
+        <header class="page-header">
+            <h1 class="page-title">Study Dashboard</h1>
+            <p class="page-subtitle">A calm overview of your courses and schedule</p>
+        </header>
+        <div class="dashboard-grid">
+            <div>
+                <section class="card">
+                    <div class="card-header header-soft-sage">
+                        <p class="card-title">Current courses</p>
+                        <p class="card-subtitle">Active modules this term</p>
+                    </div>
+                    <div class="card-body">
+                        {% if courses %}
+                        <div class="course-list">
+                            {% for course in courses %}
+                            <div class="course-row">
                                 <p class="course-name">{{ course.name }}</p>
                                 {% if course.code %}
                                 <p class="course-code">{{ course.code }}</p>
                                 {% endif %}
                             </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="empty">No course data available.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </aside>
-        <div class="columns">
-            {% for key, label, color in sections %}
-            <div class="column">
-                <div class="column-header" style="background-color: {{ color }};">{{ label }}</div>
-                <div class="tasks">
-                    {% if grouped[key] %}
-                        {% for task in grouped[key] %}
-                            <div class="task-card">
-                                <p class="task-title">{{ task.title }}</p>
-                                <p class="task-course">{{ task.course }} • {{ task.type|title }}</p>
-                                <p class="task-meta">Due: {{ task.due_nice }} <span class="due-inline">{{ task.due_display }}</span></p>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="empty">No tasks.</p>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="secondary-row">
-            <div class="column">
-                <div class="column-header" style="background-color: #e6f0ff;">
-                    <div class="header-flex">
-                        <div>
-                            <span>Study Schedule – All Courses</span>
-                            <p class="column-subtitle">Lectures, seminars, workshops &amp; exams</p>
+                            {% endfor %}
                         </div>
-                        {% if all_courses_schedule_sorted %}
-                        <button
-                            class="schedule-toggle"
-                            type="button"
-                            id="open-calendar-btn"
-                        >
-                            Full schedule ▸
-                        </button>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="tasks schedule-card" id="all-courses-schedule-card">
-                    <p class="schedule-subtitle">
-                        This week:
-                        {% if study_schedule_week_range %}
-                            {{ study_schedule_week_range.start }} – {{ study_schedule_week_range.end }}
-                        {% endif %}
-                        {% if not all_courses_schedule_week_grouped %}
-                            <span class="muted">No scheduled events.</span>
-                        {% endif %}
-                    </p>
-                    <div class="schedule-week-view">
-                        {% if all_courses_schedule_week_grouped %}
-                            {% for group in all_courses_schedule_week_grouped %}
-                                <div class="date-group">
-                                    <p class="date-heading">{{ group.label }}</p>
-                                    {% for event in group.events %}
-                                        <div class="schedule-event-row">
-                                            <div class="event-time">{{ event.time_display }}</div>
-                                            <div class="event-info">
-                                                <p class="task-title">{{ event.title }}</p>
-                                                <p class="task-meta">{{ event.course_short }}{% if event.location %} · {{ event.location }}{% endif %}</p>
-                                                {% if event.teacher %}
-                                                <p class="muted">{{ event.teacher }}</p>
-                                                {% endif %}
-                                            </div>
-                                            <div class="schedule-badges">
-                                                <span class="schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
-                                            </div>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endfor %}
-                        {% elif all_courses_schedule_fallback_grouped %}
-                            <p class="muted">No events this week. Showing upcoming items.</p>
-                            {% for group in all_courses_schedule_fallback_grouped %}
-                                <div class="date-group">
-                                    <p class="date-heading">{{ group.label }}</p>
-                                    {% for event in group.events %}
-                                        <div class="schedule-event-row">
-                                            <div class="event-time">{{ event.time_display }}</div>
-                                            <div class="event-info">
-                                                <p class="task-title">{{ event.title }}</p>
-                                                <p class="task-meta">{{ event.course_short }}{% if event.location %} · {{ event.location }}{% endif %}</p>
-                                                {% if event.teacher %}
-                                                <p class="muted">{{ event.teacher }}</p>
-                                                {% endif %}
-                                            </div>
-                                            <div class="schedule-badges">
-                                                <span class="schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
-                                            </div>
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                            {% endfor %}
                         {% else %}
-                            <p class="empty">No scheduled events yet.</p>
+                        <p class="placeholder">No courses linked yet.</p>
                         {% endif %}
                     </div>
+                </section>
+            </div>
+            <div>
+                <div class="focus-stack">
+                    {% for key, label, _ in sections %}
+                    <section class="card focus-card">
+                        <div class="card-header {% if label == 'Today' %}header-soft-peach{% elif label == 'This Week' %}header-soft-sun{% else %}header-soft-lilac{% endif %}">
+                            <p class="card-title">{{ label }}</p>
+                            {% if label == 'This Week' and study_schedule_week_range %}
+                            <p class="card-subtitle">This week: {{ study_schedule_week_range.start }} – {{ study_schedule_week_range.end }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="card-body">
+                            {% set tasks = grouped[key] %}
+                            {% if label == 'Today' and not tasks %}
+                                <p class="placeholder">No tasks today yet.</p>
+                            {% elif label == 'Later' and not tasks %}
+                                <p class="placeholder">No later tasks scheduled.</p>
+                            {% elif not tasks %}
+                                <p class="placeholder">No items here.</p>
+                            {% else %}
+                                {% if label == 'This Week' %}
+                                    {% set primary = tasks[0] %}
+                                    <div class="highlight-task">
+                                        <div class="task-badges">
+                                            <span class="pill course-pill" data-course="{{ primary.course }}">{{ primary.course }}</span>
+                                            <span class="pill type-pill type-{{ (primary.type or 'other')|lower|replace(' ', '-') }}">{{ (primary.type or 'Task')|title }}</span>
+                                        </div>
+                                        <p class="highlight-title">{{ primary.title }}</p>
+                                        <p class="highlight-due">Due {{ primary.due_nice }}</p>
+                                        {% if primary.location %}
+                                        <p class="highlight-note">{{ primary.location }}</p>
+                                        {% elif primary.submission %}
+                                        <p class="highlight-note">{{ primary.submission }}</p>
+                                        {% elif primary.description %}
+                                        <p class="highlight-note">{{ primary.description }}</p>
+                                        {% endif %}
+                                    </div>
+                                    {% if tasks|length > 1 %}
+                                    <div class="task-list">
+                                        {% for task in tasks[1:] %}
+                                        <div class="task-item">
+                                            <p class="task-title">{{ task.title }}</p>
+                                            <div class="task-badges">
+                                                <span class="pill course-pill" data-course="{{ task.course }}">{{ task.course }}</span>
+                                                <span class="pill type-pill type-{{ (task.type or 'other')|lower|replace(' ', '-') }}">{{ (task.type or 'Task')|title }}</span>
+                                            </div>
+                                            <p class="task-meta">Due {{ task.due_nice }}</p>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="task-list">
+                                        {% for task in tasks %}
+                                        <div class="task-item">
+                                            <p class="task-title">{{ task.title }}</p>
+                                            <div class="task-badges">
+                                                <span class="pill course-pill" data-course="{{ task.course }}">{{ task.course }}</span>
+                                                <span class="pill type-pill type-{{ (task.type or 'other')|lower|replace(' ', '-') }}">{{ (task.type or 'Task')|title }}</span>
+                                            </div>
+                                            <p class="task-meta">Due {{ task.due_nice }}</p>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                    </section>
+                    {% endfor %}
                 </div>
             </div>
-            <div class="column">
-                <div class="column-header" style="background-color: #e3ddff;">Upcoming – All Courses</div>
-                <div class="tasks upcoming-card">
-                    {% if upcoming_events_all_courses %}
-                        {% set next_event = upcoming_events_all_courses[0] %}
-                        <p class="next-up">
-                            Next up: {{ next_event.date_label }} ({{ next_event.weekday }}){% if next_event.time_range %}, {{ next_event.time_range }}{% endif %} – {{ next_event.title }}
-                        </p>
-                        <div class="timeline">
-                            {% for event in upcoming_events_all_courses %}
-                                <div class="timeline-row">
-                                    <div class="timeline-date">
-                                        {{ event.date_label }}
-                                        <span class="weekday">{{ event.weekday }}</span>
+            <div>
+                <section class="card schedule-card">
+                    <div class="card-header header-soft-sky schedule-card-header">
+                        <div>
+                            <p class="card-title">Study Schedule – All Courses</p>
+                            {% if study_schedule_week_range %}
+                            <p class="card-subtitle">This week: {{ study_schedule_week_range.start }} – {{ study_schedule_week_range.end }}</p>
+                            {% else %}
+                            <p class="card-subtitle">Upcoming lectures, workshops and hand-ins</p>
+                            {% endif %}
+                        </div>
+                        <button class="full-schedule-btn" type="button" id="open-calendar-btn">Full schedule ▸</button>
+                    </div>
+                    <div class="card-body schedule-card-body">
+                        <p class="section-subtitle">Nearest upcoming events</p>
+                        <div class="schedule-list" data-compact="{{ 'true' if next_schedule_events|length <= 3 else 'false' }}">
+                            {% if next_schedule_events %}
+                                {% for event in next_schedule_events %}
+                                <div class="schedule-row">
+                                    <div class="schedule-main">
+                                        <p class="schedule-time">{{ event.time_range }}</p>
+                                        <p class="schedule-title">{{ event.title }}</p>
+                                        {% if event.location %}
+                                        <p class="schedule-location">{{ event.location }}</p>
+                                        {% endif %}
                                     </div>
-                                    <div class="timeline-details">
-                                        <p class="task-title">{{ event.title }}</p>
-                                        <div class="badge-row">
-                                            <span class="course-chip course-chip-{{ event.course_class }}">{{ event.course_short }}</span>
-                                            <span class="badge schedule-badge schedule-badge-{{ event.type_badge_class }}">{{ event.type }}</span>
-                                        </div>
-                                        <p class="task-meta">
-                                            {% if event.time_range %}{{ event.time_range }}{% endif %}
-                                            {% if event.time_range and (event.location or event.details) %}
-                                                ·
-                                            {% endif %}
-                                            {% if event.location %}
-                                                {{ event.location }}
-                                            {% elif event.details %}
-                                                {{ event.details }}
-                                            {% endif %}
-                                        </p>
+                                    <div class="schedule-meta">
+                                        <span class="pill course-pill" data-course="{{ event.course_short }}">{{ event.course_short }}</span>
+                                        <span class="pill type-pill type-{{ event.type_badge_class }}">{{ event.type }}</span>
                                     </div>
                                 </div>
-                            {% endfor %}
+                                {% endfor %}
+                            {% else %}
+                                <p class="placeholder">No upcoming events.</p>
+                            {% endif %}
                         </div>
-                    {% else %}
-                        <p class="muted">No upcoming events.</p>
-                    {% endif %}
-                </div>
+                    </div>
+                </section>
+                <section class="card assistant-card">
+                    <div class="card-header header-soft-slate">
+                        <p class="card-title">Study Assistant</p>
+                        <p class="card-subtitle">Quick questions for ChatGPT</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="assistant-chat">
+                            <div class="chat-bubble bubble-user">Need a quick way to recap the WS2 workshop readings?</div>
+                            <div class="chat-bubble bubble-ai">Start by outlining the key research questions, then map each reading to the question it helps answer. Want a short bullet list?</div>
+                        </div>
+                        <div class="assistant-input">
+                            <span>Ask a quick question about your courses…</span>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
-    </div>
-    <div class="calendar-modal" id="calendar-modal" aria-hidden="true">
+    </main>
+    <div class="calendar-overlay" id="calendar-overlay" aria-hidden="true">
         <div class="calendar-backdrop" id="calendar-backdrop"></div>
-        <div class="calendar-dialog" role="dialog" aria-modal="true">
-            <div class="calendar-toolbar">
-                <div class="calendar-toolbar-title">
-                    <p class="calendar-title">Study Schedule – Full Calendar</p>
-                    <p class="calendar-subtitle-text" id="calendar-range-label"></p>
+        <div class="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-month-label">
+            <div class="calendar-head">
+                <div>
+                    <p class="calendar-title">Full schedule</p>
+                    <p class="calendar-month" id="calendar-month-label"></p>
                 </div>
                 <div class="calendar-controls">
-                    <button class="calendar-nav" id="calendar-prev" aria-label="Previous month">◀</button>
-                    <button class="calendar-nav" id="calendar-next" aria-label="Next month">▶</button>
-                    <button class="calendar-close" id="calendar-close" aria-label="Close calendar">×</button>
+                    <button class="calendar-nav-btn" type="button" data-calendar-nav="prev" aria-label="Previous month">‹</button>
+                    <button class="calendar-nav-btn" type="button" data-calendar-nav="next" aria-label="Next month">›</button>
+                    <button class="calendar-close-btn" type="button" id="calendar-close" aria-label="Close calendar">×</button>
                 </div>
             </div>
-            <div class="calendar-body">
-                <div class="calendar-main">
-                    <div class="calendar-weekdays">
-                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-                    </div>
-                    <div class="calendar-grid" id="calendar-grid"></div>
-                </div>
-                <div class="calendar-detail" id="calendar-detail">
-                    <p class="detail-date" id="calendar-day-label">Select a date</p>
-                    <div id="calendar-day-details" class="detail-events"></div>
-                </div>
+            <div class="calendar-weekdays">
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+                <span>Sun</span>
+            </div>
+            <div class="calendar-grid" id="calendar-grid" role="grid"></div>
+            <div class="calendar-detail" id="calendar-detail">
+                <p class="calendar-detail-heading" id="calendar-detail-heading">Select a day</p>
+                <p class="calendar-detail-empty" id="calendar-detail-empty">Tap a day with events to see details.</p>
+                <div class="calendar-detail-list" id="calendar-detail-list"></div>
             </div>
         </div>
     </div>
     <script>
-    const studyCalendarEvents = {{ all_courses_schedule_sorted | tojson }};
-    document.addEventListener("DOMContentLoaded", function () {
-        var openCalendarBtn = document.getElementById("open-calendar-btn");
-        var calendarModal = document.getElementById("calendar-modal");
-        var calendarBackdrop = document.getElementById("calendar-backdrop");
-        var calendarClose = document.getElementById("calendar-close");
-        var calendarGrid = document.getElementById("calendar-grid");
-        var calendarDayLabel = document.getElementById("calendar-day-label");
-        var calendarDayDetails = document.getElementById("calendar-day-details");
-        var calendarRangeLabel = document.getElementById("calendar-range-label");
-        var prevBtn = document.getElementById("calendar-prev");
-        var nextBtn = document.getElementById("calendar-next");
-        var currentMonthDate = new Date();
-        var selectedDate = new Date();
-        var eventsByDate = {};
-        studyCalendarEvents.forEach(function (event) {
-            var key = event.date_iso;
-            if (!eventsByDate[key]) {
-                eventsByDate[key] = [];
-            }
-            eventsByDate[key].push(event);
-        });
-        var todayIso = new Date().toISOString().slice(0, 10);
-        if (eventsByDate[todayIso]) {
-            selectedDate = new Date(todayIso);
-            currentMonthDate = new Date(todayIso);
-        } else if (studyCalendarEvents.length) {
-            selectedDate = new Date(studyCalendarEvents[0].date_iso);
-            currentMonthDate = new Date(studyCalendarEvents[0].date_iso);
-        }
-
-        function openCalendarModal() {
-            calendarModal.classList.add("open");
-            calendarModal.setAttribute("aria-hidden", "false");
-            document.body.style.overflow = "hidden";
-            renderCalendar();
-            selectDate(selectedDate.toISOString().slice(0, 10));
-        }
-
-        function closeCalendarModal() {
-            calendarModal.classList.remove("open");
-            calendarModal.setAttribute("aria-hidden", "true");
-            document.body.style.overflow = "";
-        }
-
-        function changeMonth(offset) {
-            currentMonthDate.setMonth(currentMonthDate.getMonth() + offset);
-            renderCalendar();
-        }
-
-        function formatDateLabel(dateObj) {
-            return dateObj.toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
+        document.addEventListener("DOMContentLoaded", function () {
+            var scheduleEvents = {{ calendar_events_data|tojson }};
+            var eventsByDate = {};
+            scheduleEvents.forEach(function (event) {
+                if (!eventsByDate[event.date]) {
+                    eventsByDate[event.date] = [];
+                }
+                eventsByDate[event.date].push(event);
             });
-        }
-
-        function renderCalendar() {
-            var firstDay = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1);
-            var startOffset = (firstDay.getDay() + 6) % 7;
-            var startDate = new Date(firstDay);
-            startDate.setDate(firstDay.getDate() - startOffset);
-            calendarGrid.innerHTML = "";
-            for (var i = 0; i < 42; i++) {
-                (function () {
-                    var cellDate = new Date(startDate);
-                    cellDate.setDate(startDate.getDate() + i);
-                    var iso = cellDate.toISOString().slice(0, 10);
-                    var cell = document.createElement("div");
+            Object.keys(eventsByDate).forEach(function (dateKey) {
+                eventsByDate[dateKey].sort(function (a, b) {
+                    var aKey = a.start_time || a.time_display || "";
+                    var bKey = b.start_time || b.time_display || "";
+                    return aKey.localeCompare(bKey);
+                });
+            });
+            var overlay = document.getElementById("calendar-overlay");
+            var openBtn = document.getElementById("open-calendar-btn");
+            var closeBtn = document.getElementById("calendar-close");
+            var backdrop = document.getElementById("calendar-backdrop");
+            var grid = document.getElementById("calendar-grid");
+            var monthLabel = document.getElementById("calendar-month-label");
+            var detailHeading = document.getElementById("calendar-detail-heading");
+            var detailList = document.getElementById("calendar-detail-list");
+            var detailEmpty = document.getElementById("calendar-detail-empty");
+            var navButtons = document.querySelectorAll("[data-calendar-nav]");
+            var currentDate = new Date();
+            var eventDates = Object.keys(eventsByDate).sort();
+            var todayIso = new Date().toISOString().split("T")[0];
+            var selectedDate = null;
+            if (eventDates.length) {
+                if (eventsByDate[todayIso]) {
+                    currentDate = new Date(todayIso);
+                    selectedDate = todayIso;
+                } else {
+                    currentDate = new Date(eventDates[0]);
+                    selectedDate = eventDates[0];
+                }
+            }
+            function updateBodyLock(state) {
+                document.body.style.overflow = state ? "hidden" : "";
+            }
+            function renderDetail() {
+                if (!detailHeading || !detailList || !detailEmpty) {
+                    return;
+                }
+                if (!selectedDate || !eventsByDate[selectedDate]) {
+                    detailHeading.textContent = "Select a day";
+                    detailList.innerHTML = "";
+                    detailEmpty.style.display = "block";
+                    return;
+                }
+                detailHeading.textContent = new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                });
+                detailList.innerHTML = "";
+                detailEmpty.style.display = "none";
+                eventsByDate[selectedDate].forEach(function (event) {
+                    var item = document.createElement("div");
+                    item.className = "calendar-detail-item";
+                    var time = document.createElement("p");
+                    time.className = "calendar-detail-time";
+                    time.textContent = event.start_time
+                        ? event.start_time + (event.end_time ? "–" + event.end_time : "")
+                        : event.time_display;
+                    var title = document.createElement("p");
+                    title.className = "calendar-detail-title";
+                    title.textContent = event.title;
+                    var meta = document.createElement("p");
+                    meta.className = "calendar-detail-meta";
+                    var location = event.location ? " • " + event.location : "";
+                    meta.textContent = event.course_short + " • " + event.type + location;
+                    item.appendChild(time);
+                    item.appendChild(title);
+                    item.appendChild(meta);
+                    detailList.appendChild(item);
+                });
+            }
+            function getCalendarStart(dateObj) {
+                var start = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+                var day = start.getDay();
+                var offset = day === 0 ? -6 : 1 - day;
+                start.setDate(start.getDate() + offset);
+                return start;
+            }
+            function trimLabel(text) {
+                if (!text) {
+                    return "";
+                }
+                return text.length > 18 ? text.slice(0, 17) + "…" : text;
+            }
+            function renderCalendarGrid() {
+                if (!grid) {
+                    return;
+                }
+                if (monthLabel) {
+                    monthLabel.textContent = currentDate.toLocaleDateString(undefined, {
+                        month: "long",
+                        year: "numeric",
+                    });
+                }
+                grid.innerHTML = "";
+                var start = getCalendarStart(currentDate);
+                var iterDate = new Date(start);
+                for (var i = 0; i < 42; i++) {
+                    var cellDate = new Date(iterDate);
+                    var iso = cellDate.toISOString().split("T")[0];
+                    var cell = document.createElement("button");
+                    cell.type = "button";
                     cell.className = "calendar-cell";
-                    if (cellDate.getMonth() !== currentMonthDate.getMonth()) {
+                    cell.setAttribute("data-date", iso);
+                    if (cellDate.getMonth() !== currentDate.getMonth()) {
                         cell.classList.add("other-month");
                     }
-                    if (iso === selectedDate.toISOString().slice(0, 10)) {
+                    if (eventsByDate[iso]) {
+                        cell.classList.add("has-events");
+                    }
+                    if (selectedDate === iso) {
                         cell.classList.add("selected");
                     }
-                    var number = document.createElement("div");
-                    number.className = "calendar-date-number";
-                    number.textContent = cellDate.getDate();
-                    cell.appendChild(number);
-                    var events = eventsByDate[iso] || [];
-                    if (events.length) {
-                        var chips = document.createElement("div");
-                        chips.className = "calendar-cell-events";
-                        events.slice(0, 3).forEach(function (item) {
+                    var dateLabel = document.createElement("div");
+                    dateLabel.className = "calendar-date";
+                    dateLabel.textContent = cellDate.getDate();
+                    cell.appendChild(dateLabel);
+                    if (eventsByDate[iso] && eventsByDate[iso].length) {
+                        var eventsWrap = document.createElement("div");
+                        eventsWrap.className = "calendar-events";
+                        eventsByDate[iso].slice(0, 2).forEach(function (eventItem) {
                             var chip = document.createElement("span");
-                            chip.className = "calendar-chip calendar-chip-" + item.type_badge_class;
-                            chip.textContent = (item.start_time || item.time_display) + " · " + item.type;
-                            chips.appendChild(chip);
+                            chip.className = "calendar-chip chip-" + (eventItem.type_badge_class || "other");
+                            var label = eventItem.start_time ? eventItem.start_time + " " : "";
+                            label += trimLabel(eventItem.title);
+                            chip.textContent = label;
+                            eventsWrap.appendChild(chip);
                         });
-                        if (events.length > 3) {
-                            var more = document.createElement("span");
-                            more.className = "calendar-chip calendar-chip-more";
-                            more.textContent = "+" + (events.length - 3) + " more";
-                            chips.appendChild(more);
+                        if (eventsByDate[iso].length > 2) {
+                            var moreChip = document.createElement("span");
+                            moreChip.className = "calendar-chip more-chip";
+                            moreChip.textContent = "+" + (eventsByDate[iso].length - 2);
+                            eventsWrap.appendChild(moreChip);
                         }
-                        cell.appendChild(chips);
+                        cell.appendChild(eventsWrap);
                     }
-                    cell.addEventListener("click", function () {
-                        selectedDate = cellDate;
-                        selectDate(iso);
-                        renderCalendar();
-                    });
-                    calendarGrid.appendChild(cell);
-                })();
+                    grid.appendChild(cell);
+                    iterDate.setDate(iterDate.getDate() + 1);
+                }
             }
-            var monthLabel = currentMonthDate.toLocaleDateString("en-US", {
-                month: "long",
-                year: "numeric",
+            function renderCalendar() {
+                renderCalendarGrid();
+                renderDetail();
+            }
+            function openOverlay() {
+                if (!overlay) {
+                    return;
+                }
+                overlay.classList.add("open");
+                overlay.setAttribute("aria-hidden", "false");
+                updateBodyLock(true);
+                renderCalendar();
+            }
+            function closeOverlay() {
+                if (!overlay) {
+                    return;
+                }
+                overlay.classList.remove("open");
+                overlay.setAttribute("aria-hidden", "true");
+                updateBodyLock(false);
+            }
+            if (openBtn) {
+                openBtn.addEventListener("click", openOverlay);
+            }
+            if (closeBtn) {
+                closeBtn.addEventListener("click", closeOverlay);
+            }
+            if (backdrop) {
+                backdrop.addEventListener("click", closeOverlay);
+            }
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && overlay && overlay.classList.contains("open")) {
+                    closeOverlay();
+                }
             });
-            calendarRangeLabel.textContent = monthLabel;
-        }
-
-        function selectDate(iso) {
-            var dateObj = new Date(iso);
-            calendarDayLabel.textContent = formatDateLabel(dateObj);
-            calendarDayDetails.innerHTML = "";
-            var events = eventsByDate[iso] || [];
-            if (!events.length) {
-                var empty = document.createElement("p");
-                empty.className = "muted";
-                empty.textContent = "No events for this date.";
-                calendarDayDetails.appendChild(empty);
-                return;
-            }
-            events
-                .sort(function (a, b) {
-                    var aKey = (a.start_time || "") + a.title;
-                    var bKey = (b.start_time || "") + b.title;
-                    return aKey.localeCompare(bKey);
-                })
-                .forEach(function (event) {
-                    var card = document.createElement("div");
-                    card.className = "detail-card";
-                    card.innerHTML =
-                        "<p class='detail-time'>" +
-                        (event.start_time ? event.start_time : event.time_display) +
-                        "</p>" +
-                        "<p class='detail-title'>" +
-                        event.title +
-                        "</p>" +
-                        "<p class='detail-meta'>" +
-                        event.course_short +
-                        " · <span class='detail-chip detail-chip-" +
-                        event.type_badge_class +
-                        "'>" +
-                        event.type +
-                        "</span></p>" +
-                        "<p class='detail-location'>" +
-                        (event.location || event.details || "Details TBA") +
-                        "</p>";
-                    calendarDayDetails.appendChild(card);
+            if (grid) {
+                grid.addEventListener("click", function (event) {
+                    var cell = event.target.closest(".calendar-cell");
+                    if (!cell) {
+                        return;
+                    }
+                    selectedDate = cell.getAttribute("data-date");
+                    renderCalendar();
                 });
-        }
-
-        if (openCalendarBtn) {
-            openCalendarBtn.addEventListener("click", openCalendarModal);
-        }
-        if (calendarBackdrop) {
-            calendarBackdrop.addEventListener("click", closeCalendarModal);
-        }
-        if (calendarClose) {
-            calendarClose.addEventListener("click", closeCalendarModal);
-        }
-        if (prevBtn) {
-            prevBtn.addEventListener("click", function () {
-                changeMonth(-1);
-            });
-        }
-        if (nextBtn) {
-            nextBtn.addEventListener("click", function () {
-                changeMonth(1);
-            });
-        }
-        document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape" && calendarModal.classList.contains("open")) {
-                closeCalendarModal();
             }
+            navButtons.forEach(function (button) {
+                button.addEventListener("click", function () {
+                    var direction = button.getAttribute("data-calendar-nav");
+                    var offset = direction === "next" ? 1 : -1;
+                    currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
+                    renderCalendarGrid();
+                });
+            });
+            renderCalendar();
         });
-    });
     </script>
 </body>
 </html>
+
 """
 
 def build_grouped_tasks() -> Dict[str, List[Dict[str, object]]]:
@@ -1711,6 +1709,32 @@ def get_upcoming_events_all_courses(
     return upcoming
 
 
+def build_calendar_events_data(events: List[Dict[str, object]]) -> List[Dict[str, str]]:
+    calendar_items: List[Dict[str, str]] = []
+    for event in events:
+        event_date = event.get("date")
+        if not isinstance(event_date, date):
+            continue
+        start_time = str(event.get("start_time") or "") or ""
+        end_time = str(event.get("end_time") or "") or ""
+        calendar_items.append(
+            {
+                "id": str(event.get("id", "")),
+                "date": event_date.isoformat(),
+                "title": str(event.get("title") or ""),
+                "course": str(event.get("course") or ""),
+                "course_short": str(event.get("course_short") or ""),
+                "type": str(event.get("type") or ""),
+                "type_badge_class": str(event.get("type_badge_class") or "other"),
+                "time_display": str(event.get("time_display") or ""),
+                "start_time": start_time,
+                "end_time": end_time,
+                "location": str(event.get("location") or ""),
+            }
+        )
+    return calendar_items
+
+
 @app.route("/")
 def dashboard() -> str:
     grouped = build_grouped_tasks()
@@ -1758,9 +1782,10 @@ def dashboard() -> str:
     study_schedule_upcoming = get_upcoming_schedule(
         all_courses_schedule_sorted, today
     )
-    upcoming_events_all_courses = get_upcoming_events_all_courses(
-        all_courses_schedule_sorted, today, limit=6
+    next_schedule_events = get_upcoming_events_all_courses(
+        all_courses_schedule_sorted, today, limit=5
     )
+    calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
     week_grouped = group_schedule_by_date(study_schedule_this_week)
     fallback_events = study_schedule_upcoming[:5]
     fallback_grouped = group_schedule_by_date(fallback_events)
@@ -1783,8 +1808,29 @@ def dashboard() -> str:
         all_courses_schedule_week_grouped=week_grouped,
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
-        upcoming_events_all_courses=upcoming_events_all_courses,
+        next_schedule_events=next_schedule_events,
+        calendar_events_data=calendar_events_data,
     )
+
+
+@app.route("/chat", methods=["POST"])
+def chat() -> tuple[dict[str, str], int] | tuple[dict[str, str], int, dict[str, str]]:
+    data = request.get_json()
+    user_message = data.get("message", "") if isinstance(data, dict) else ""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are Peggy’s study assistant. Always clear, helpful, and concise.",
+            },
+            {"role": "user", "content": user_message},
+        ],
+    )
+
+    reply = response.choices[0].message["content"]
+    return jsonify({"reply": reply})
 
 
 if __name__ == "__main__":
