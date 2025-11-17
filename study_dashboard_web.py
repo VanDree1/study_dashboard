@@ -1108,27 +1108,19 @@ HTML_TEMPLATE = """
                 <section class="card schedule-card">
                     <div class="card-header header-soft-sky schedule-card-header">
                         <div>
-                            <p class="card-title">Study Schedule – All Courses</p>
-                            {% if study_schedule_week_range %}
-                            <p class="card-subtitle">This week: {{ study_schedule_week_range.start }} – {{ study_schedule_week_range.end }}</p>
-                            {% else %}
-                            <p class="card-subtitle">Upcoming lectures, workshops and hand-ins</p>
-                            {% endif %}
+                            <p class="card-title">Upcoming – All Courses</p>
+                            <p class="card-subtitle">Next few events across every course</p>
                         </div>
-                        <button class="full-schedule-btn" type="button" id="open-calendar-btn">Full schedule ▸</button>
                     </div>
                     <div class="card-body schedule-card-body">
-                        <p class="section-subtitle">Nearest upcoming events</p>
-                        <div class="schedule-list" data-compact="{{ 'true' if next_schedule_events|length <= 3 else 'false' }}">
+                        <div class="schedule-list" data-compact="true">
                             {% if next_schedule_events %}
                                 {% for event in next_schedule_events %}
                                 <div class="schedule-row">
                                     <div class="schedule-main">
-                                        <p class="schedule-time">{{ event.time_range }}</p>
+                                        <p class="schedule-time">{{ event.date_label }} · {{ event.weekday }}</p>
                                         <p class="schedule-title">{{ event.title }}</p>
-                                        {% if event.location %}
-                                        <p class="schedule-location">{{ event.location }}</p>
-                                        {% endif %}
+                                        <p class="schedule-location">{{ event.time_range }}{% if event.location %} · {{ event.location }}{% endif %}</p>
                                     </div>
                                     <div class="schedule-meta">
                                         <span class="pill course-pill" data-course="{{ event.course_short }}">{{ event.course_short }}</span>
@@ -1139,6 +1131,9 @@ HTML_TEMPLATE = """
                             {% else %}
                                 <p class="placeholder">No upcoming events.</p>
                             {% endif %}
+                        </div>
+                        <div style="text-align: right; margin-top: 16px;">
+                            <button class="full-schedule-btn" type="button" id="upcoming-open-calendar">Open full calendar ▸</button>
                         </div>
                     </div>
                 </section>
@@ -1439,6 +1434,10 @@ HTML_TEMPLATE = """
                         openOverlay();
                     }
                 });
+            }
+            var upcomingOpenCalendar = document.getElementById("upcoming-open-calendar");
+            if (upcomingOpenCalendar) {
+                upcomingOpenCalendar.addEventListener("click", openOverlay);
             }
             document.querySelectorAll(".mini-calendar-nav").forEach(function (navButton) {
                 navButton.addEventListener("click", function (event) {
