@@ -7,7 +7,7 @@ import json
 import os
 import re
 import calendar
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from itertools import groupby
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -243,8 +243,6 @@ SECTION_CONFIG: Tuple[Tuple[str, str, str], ...] = (
     ("THIS WEEK", "This Week", "#ffe8b3"),
     ("LATER", "Later", "#d7e8ff"),
 )
-
-UPCOMING_DEFAULT_LIMIT = 3
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -671,101 +669,119 @@ HTML_TEMPLATE = """
         .schedule-card-body {
             padding-top: 16px;
         }
-        .full-schedule-btn {
-            border: none;
-            background: #edf1ff;
-            color: #1f3fb0;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 8px 16px;
-            border-radius: 999px;
-            cursor: pointer;
-            transition: background 0.2s ease, transform 0.2s ease;
-            white-space: nowrap;
-        }
-        .full-schedule-btn:hover {
-            background: #dfe6ff;
-            transform: translateY(-1px);
-        }
-        .upcoming-toggle-btn {
-            border: none;
-            background: transparent;
-            color: #1f3fb0;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .schedule-list {
+        .card-upcoming-all {
             display: flex;
             flex-direction: column;
-            gap: 18px;
-            max-height: 320px;
-            overflow: hidden;
-            position: relative;
-            padding-bottom: 24px;
         }
-        .schedule-list::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 40px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff);
-            pointer-events: none;
+        .card-upcoming-all .card-header {
+            margin-bottom: 0.5rem;
         }
-        .schedule-list[data-expanded="true"] {
-            max-height: none;
-            padding-bottom: 0;
+        .card-upcoming-all .card-subtitle {
+            font-size: 0.85rem;
+            color: rgba(0, 0, 0, 0.55);
+            margin-top: 0.15rem;
         }
-        .schedule-list[data-expanded="true"]::after {
-            display: none;
-        }
-        .schedule-row {
+        .upcoming-list {
             display: flex;
-            gap: 20px;
-            justify-content: space-between;
-            border-bottom: 1px solid #f0f0f4;
-            padding-bottom: 14px;
+            flex-direction: column;
+            gap: 0.6rem;
         }
-        .schedule-list[data-expanded="false"] .schedule-row.extra-event {
-            display: none;
+        .upcoming-item {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.75rem;
+            padding: 0.65rem 0.75rem;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(8px);
         }
-        .schedule-row:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
+        .upcoming-date {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 2.6rem;
+            justify-content: center;
         }
-        .schedule-main {
-            flex: 1;
-            min-width: 0;
-        }
-        .schedule-time {
-            margin: 0;
-            font-size: 13px;
+        .upcoming-date-day {
             font-weight: 600;
-            color: #4a5568;
-            letter-spacing: 0.02em;
-        }
-        .schedule-title {
-            margin: 4px 0 0;
-            font-size: 15px;
-            font-weight: 600;
+            font-size: 1.05rem;
             color: var(--text-strong);
         }
-        .schedule-location {
-            margin: 6px 0 0;
-            font-size: 13px;
-            color: var(--text-muted);
+        .upcoming-date-weekday {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: rgba(0, 0, 0, 0.45);
         }
-        .schedule-meta {
+        .upcoming-title-row {
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 140px;
-            align-items: flex-end;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .upcoming-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin: 0;
+            color: var(--text-strong);
+        }
+        .upcoming-meta-row {
+            margin-top: 0.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: center;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+        .badge-course {
+            background: rgba(99, 102, 241, 0.1);
+            color: #4f46e5;
+        }
+        .badge-kind {
+            background: rgba(139, 92, 246, 0.1);
+            color: #7c3aed;
+        }
+        .upcoming-location {
+            font-size: 0.75rem;
+            color: rgba(0, 0, 0, 0.55);
+        }
+        .upcoming-time-row {
+            margin-top: 0.2rem;
+            font-size: 0.82rem;
+            color: rgba(0, 0, 0, 0.65);
+        }
+        .upcoming-prep {
+            margin-top: 0.3rem;
+            font-size: 0.75rem;
+            color: rgba(0, 0, 0, 0.55);
+        }
+        .upcoming-footer {
+            margin-top: 0.75rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .link-button.upcoming-show-all {
+            background: none;
+            border: none;
+            color: #2563eb;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+        }
+        .link-button.upcoming-show-all:hover {
+            text-decoration: underline;
+        }
+        .upcoming-empty {
+            margin: 0;
+            color: rgba(0, 0, 0, 0.55);
+            font-size: 0.85rem;
         }
         .type-pill {
             background: #f1f2f4;
@@ -1030,13 +1046,16 @@ HTML_TEMPLATE = """
             .card-body {
                 padding: 20px;
             }
-            .schedule-row {
-                flex-direction: column;
+            .upcoming-item {
+                grid-template-columns: 1fr;
             }
-            .schedule-meta {
-                align-items: flex-start;
-                min-width: auto;
-                width: 100%;
+            .upcoming-date {
+                flex-direction: row;
+                justify-content: flex-start;
+                gap: 0.4rem;
+            }
+            .upcoming-date-day {
+                font-size: 0.95rem;
             }
         }
     </style>
@@ -1143,51 +1162,67 @@ HTML_TEMPLATE = """
                 </div>
             </div>
             <div>
-                <section class="card schedule-card">
-                    <div class="card-header header-soft-sky schedule-card-header">
-                        <div>
-                            <p class="card-title">Upcoming – All Courses</p>
-                            <p class="card-subtitle">Next few events across every course</p>
-                        </div>
+                <section class="card card-upcoming-all">
+                    <div class="card-header header-soft-sky">
+                        <p class="card-title">Upcoming – All Courses</p>
+                        <p class="card-subtitle">Next few focus events across your courses</p>
                     </div>
-                    <div class="card-body schedule-card-body">
-                        {% set total_events = upcoming_events_all_courses|length %}
-                        <div class="schedule-list" id="upcoming-events-list" data-expanded="false">
-                            {% if upcoming_events_all_courses %}
-                                {% for event in upcoming_events_all_courses %}
-                                <div class="schedule-row{% if loop.index > upcoming_default_limit %} extra-event{% endif %}">
-                                    <div class="schedule-main">
-                                        <p class="schedule-time">{{ event.date_label }} · {{ event.weekday }}</p>
-                                        <p class="schedule-title">{{ event.title }}</p>
-                                        <p class="schedule-location">{{ event.time_range }}{% if event.location %} · {{ event.location }}{% endif %}</p>
+                    <div class="card-body">
+                        <div class="upcoming-list">
+                            {% if upcoming_highlights and upcoming_highlights|length > 0 %}
+                                {% for event in upcoming_highlights %}
+                                <article class="upcoming-item">
+                                    <div class="upcoming-date">
+                                        <div class="upcoming-date-day">{{ event.start_dt.strftime("%d") }}</div>
+                                        <div class="upcoming-date-weekday">{{ event.start_dt.strftime("%a") }}</div>
                                     </div>
-                                    <div class="schedule-meta">
-                                        <span class="pill course-pill" data-course="{{ event.course_short }}">{{ event.course_short }}</span>
-                                        <span class="pill type-pill type-{{ event.type_badge_class }}">{{ event.type }}</span>
+                                    <div class="upcoming-main">
+                                        <div class="upcoming-title-row">
+                                            <h3 class="upcoming-title">{{ event.title }}</h3>
+                                        </div>
+                                        <div class="upcoming-meta-row">
+                                            <span class="badge badge-course">{{ event.course_short or event.course }}</span>
+                                            <span class="badge badge-kind">{{ event.kind }}</span>
+                                            {% if event.location %}
+                                            <span class="upcoming-location">{{ event.location }}</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="upcoming-time-row">
+                                            <span class="upcoming-time">
+                                                {% if event.has_time %}
+                                                    {{ event.start_dt.strftime("%H:%M") }}
+                                                    {% if event.end_dt %}
+                                                        – {{ event.end_dt.strftime("%H:%M") }}
+                                                    {% endif %}
+                                                {% elif event.time_display %}
+                                                    {{ event.time_display }}
+                                                {% else %}
+                                                    Time TBA
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        {% if event.prep_estimate %}
+                                        <div class="upcoming-prep">{{ event.prep_estimate }}</div>
+                                        {% endif %}
                                     </div>
-                                </div>
+                                </article>
                                 {% endfor %}
                             {% else %}
-                                <p class="placeholder">No upcoming events.</p>
+                                <p class="upcoming-empty">No upcoming events found.</p>
                             {% endif %}
                         </div>
-                        {% if total_events > upcoming_default_limit %}
-                        <div style="text-align: right; margin-top: 8px;">
+                        {% set total_events = upcoming_all_events|length if upcoming_all_events else 0 %}
+                        {% if total_events > 0 %}
+                        <div class="upcoming-footer">
                             <button
-                                class="upcoming-toggle-btn"
                                 type="button"
-                                id="upcoming-toggle"
-                                aria-expanded="false"
-                                data-hide-text="Show fewer"
-                                data-show-text="Show all {{ total_events }} events ›"
+                                class="link-button upcoming-show-all"
+                                data-open-full-schedule="true"
                             >
-                                Show all {{ total_events }} events ›
+                                Show all {{ total_events }} events
                             </button>
                         </div>
                         {% endif %}
-                        <div style="text-align: right; margin-top: 12px;">
-                            <button class="full-schedule-btn" type="button" id="upcoming-open-calendar">Open full calendar ▸</button>
-                        </div>
                     </div>
                 </section>
                 <section class="card assistant-card">
@@ -1306,13 +1341,10 @@ HTML_TEMPLATE = """
             var detailList = document.getElementById("calendar-detail-list");
             var detailEmpty = document.getElementById("calendar-detail-empty");
             var monthLabel = document.getElementById("calendar-month-label");
-            var openBtn = document.getElementById("open-calendar-btn");
-            var upcomingOpenCalendar = document.getElementById("upcoming-open-calendar");
             var closeBtn = document.getElementById("calendar-close");
             var backdrop = document.getElementById("calendar-backdrop");
             var navButtons = document.querySelectorAll("[data-calendar-nav]");
-            var upcomingToggle = document.getElementById("upcoming-toggle");
-            var upcomingList = document.getElementById("upcoming-events-list");
+            var fullScheduleButtons = document.querySelectorAll("[data-open-full-schedule='true']");
 
             var calendarState = {
                 currentYear: initialYear,
@@ -1705,22 +1737,6 @@ HTML_TEMPLATE = """
 
             renderMiniCalendar();
 
-            if (upcomingList && upcomingToggle) {
-                function updateToggleButtonState(expanded) {
-                    var showText = upcomingToggle.getAttribute("data-show-text") || "Show more";
-                    var hideText = upcomingToggle.getAttribute("data-hide-text") || "Show fewer";
-                    upcomingToggle.textContent = expanded ? hideText : showText;
-                    upcomingToggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-                }
-                upcomingToggle.addEventListener("click", function () {
-                    var expanded = upcomingList.getAttribute("data-expanded") === "true";
-                    var nextState = !expanded;
-                    upcomingList.setAttribute("data-expanded", nextState ? "true" : "false");
-                    updateToggleButtonState(nextState);
-                });
-                updateToggleButtonState(false);
-            }
-
             miniNavButtons.forEach(function (button) {
                 button.addEventListener("click", function (event) {
                     event.stopPropagation();
@@ -1751,17 +1767,13 @@ HTML_TEMPLATE = """
                 });
             }
 
-            if (openBtn) {
-                openBtn.addEventListener("click", function () {
+            fullScheduleButtons.forEach(function (button) {
+                button.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
                     openOverlay({ forceSelection: true });
                 });
-            }
-
-            if (upcomingOpenCalendar) {
-                upcomingOpenCalendar.addEventListener("click", function () {
-                    openOverlay({ forceSelection: true });
-                });
-            }
+            });
 
             navButtons.forEach(function (button) {
                 button.addEventListener("click", function () {
@@ -2182,6 +2194,34 @@ def _normalize_event_type(type_value: str) -> Tuple[str, str | None, str]:
     return type_value or "Event", track, "other"
 
 
+def _parse_time_string(value: str | None) -> time | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%H:%M").time()
+    except ValueError:
+        return None
+
+
+def _combine_date_time(date_value: date, time_value: time | None) -> datetime:
+    base_time = time_value or time(0, 0)
+    return datetime.combine(date_value, base_time, TIMEZONE)
+
+
+def _estimate_prep_text(event: Dict[str, object]) -> str:
+    kind_value = str(event.get("kind") or event.get("type") or "").lower()
+    course_label = event.get("course_short") or event.get("course")
+    if "hand" in kind_value or "exam" in kind_value:
+        return "Prep: finalize your submission materials and review the instructions."
+    if "workshop" in kind_value:
+        return "Prep: skim your latest notes and bring one question to discuss."
+    if "seminar" in kind_value:
+        return "Prep: review the assigned readings and note a takeaway."
+    if "lecture" in kind_value:
+        return f"Prep: glance through the next chapter for {course_label}."
+    return "Prep: check the agenda and make sure everything is ready."
+
+
 def _normalize_course_schedule(
     entries: List[Dict[str, str]],
     *,
@@ -2205,6 +2245,11 @@ def _normalize_course_schedule(
         title_value = entry.get("title", "").strip()
         slug = _slugify_label(title_value) or f"item-{index}"
         event_id = f"{course_slug}_{date_value.strftime('%Y%m%d')}_{slug}"
+        start_time_obj = _parse_time_string(start_time)
+        end_time_obj = _parse_time_string(end_time)
+        start_dt = _combine_date_time(date_value, start_time_obj)
+        end_dt = _combine_date_time(date_value, end_time_obj) if end_time_obj else None
+        has_time = start_time_obj is not None
         normalized.append(
             {
                 "id": event_id,
@@ -2224,10 +2269,14 @@ def _normalize_course_schedule(
                 "teacher": entry.get("teacher", ""),
                 "date": date_value,
                 "date_iso": date_value.isoformat(),
+                "start_dt": start_dt,
+                "end_dt": end_dt,
+                "has_time": has_time,
                 "day": date_value.strftime("%d"),
                 "weekday": date_value.strftime("%a"),
                 "date_heading": f"{date_value.strftime('%d %b')} – {date_value.strftime('%a')}",
                 "time_sort": start_time or "",
+                "kind": type_label,
             }
         )
     return normalized
@@ -2278,40 +2327,6 @@ def group_schedule_by_date(events: List[Dict[str, object]]) -> List[Dict[str, ob
     return grouped
 
 
-def get_upcoming_events_all_courses(
-    events: List[Dict[str, object]], today: date, limit: int = 8
-) -> List[Dict[str, object]]:
-    future_events = [
-        event for event in events if isinstance(event["date"], date) and event["date"] >= today
-    ]
-    future_events.sort(key=lambda item: (item["date"], item["time_sort"]))
-    upcoming: List[Dict[str, object]] = []
-    for event in future_events[:limit]:
-        if event["start_time"] and event["end_time"]:
-            time_range = f"{event['start_time']}\u2013{event['end_time']}"
-        elif event["start_time"]:
-            time_range = event["start_time"]
-        else:
-            time_range = event["time_display"]
-        upcoming.append(
-            {
-                "id": event["id"],
-                "title": event["title"],
-                "course": event["course"],
-                "course_short": event["course_short"],
-                "course_class": event["course_slug"],
-                "type": event["type"],
-                "type_badge_class": event["type_badge_class"],
-                "date_label": event["date"].strftime("%d %b"),
-                "weekday": event["date"].strftime("%a"),
-                "time_range": time_range,
-                "location": event["location"],
-                "details": event["details"],
-            }
-        )
-    return upcoming
-
-
 def build_calendar_events_data(events: List[Dict[str, object]]) -> List[Dict[str, str]]:
     calendar_items: List[Dict[str, str]] = []
     for event in events:
@@ -2336,6 +2351,71 @@ def build_calendar_events_data(events: List[Dict[str, object]]) -> List[Dict[str
             }
         )
     return calendar_items
+
+
+def build_upcoming_highlights(
+    events: List[Dict[str, object]], max_items: int = 5
+) -> List[Dict[str, object]]:
+    now = datetime.now(TIMEZONE)
+    future_events: List[Dict[str, object]] = [
+        event
+        for event in events
+        if isinstance(event.get("start_dt"), datetime) and event["start_dt"] >= now
+    ]
+    highlights: List[Dict[str, object]] = []
+    used_ids: set[str] = set()
+
+    def add_event(event: Dict[str, object]) -> None:
+        event_id = str(event.get("id") or "")
+        if not event_id or event_id in used_ids:
+            return
+        event_copy = dict(event)
+        event_copy["prep_estimate"] = _estimate_prep_text(event_copy)
+        highlights.append(event_copy)
+        used_ids.add(event_id)
+
+    def kind_label(event: Dict[str, object]) -> str:
+        return str(event.get("kind") or event.get("type") or "").lower()
+
+    for event in future_events:
+        kind = kind_label(event)
+        if "hand" in kind or "exam" in kind:
+            add_event(event)
+            break
+
+    for event in future_events:
+        if len(highlights) >= max_items:
+            break
+        kind = kind_label(event)
+        if "workshop" in kind:
+            add_event(event)
+            break
+
+    lecture_courses: set[str] = set()
+    for event in future_events:
+        if len(highlights) >= max_items:
+            break
+        kind = kind_label(event)
+        if "lecture" not in kind:
+            continue
+        course_key = str(
+            event.get("course_short") or event.get("course") or event.get("course_slug") or ""
+        )
+        if not course_key or course_key in lecture_courses:
+            continue
+        add_event(event)
+        lecture_courses.add(course_key)
+
+    if len(highlights) < max_items:
+        for event in future_events:
+            if len(highlights) >= max_items:
+                break
+            if str(event.get("id") or "") in used_ids:
+                continue
+            add_event(event)
+
+    highlights.sort(key=lambda item: item.get("start_dt") or now)
+    return highlights[:max_items]
 
 
 def _mini_calendar_category(type_value: str) -> str:
@@ -2488,18 +2568,12 @@ def dashboard() -> str:
     study_schedule_upcoming = get_upcoming_schedule(
         all_courses_schedule_sorted, today
     )
-    total_future_events = len(study_schedule_upcoming)
-    if total_future_events == 0:
-        upcoming_events_all_courses: List[Dict[str, object]] = []
-    else:
-        upcoming_events_all_courses = get_upcoming_events_all_courses(
-            all_courses_schedule_sorted, today, limit=total_future_events
-        )
+    upcoming_highlights = build_upcoming_highlights(all_courses_schedule_sorted, max_items=5)
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
     mini_month_param = request.args.get("mini_month", "")
     target_year: int | None = None
     target_month: int | None = None
-    match = re.fullmatch(r"(\\d{4})-(\\d{2})", mini_month_param)
+    match = re.fullmatch(r"(\d{4})-(\d{2})", mini_month_param)
     if match:
         potential_year = int(match.group(1))
         potential_month = int(match.group(2))
@@ -2531,8 +2605,8 @@ def dashboard() -> str:
         all_courses_schedule_week_grouped=week_grouped,
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
-        upcoming_events_all_courses=upcoming_events_all_courses,
-        upcoming_default_limit=UPCOMING_DEFAULT_LIMIT,
+        upcoming_highlights=upcoming_highlights,
+        upcoming_all_events=study_schedule_upcoming,
         calendar_events_data=calendar_events_data,
         mini_calendar=mini_calendar,
         today_iso=today.isoformat(),
