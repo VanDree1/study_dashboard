@@ -684,60 +684,78 @@ HTML_TEMPLATE = """
         .upcoming-list {
             display: flex;
             flex-direction: column;
-            gap: 0.6rem;
-        }
-        .upcoming-day-block {
-            display: grid;
-            grid-template-columns: auto 1fr;
             gap: 0.8rem;
-            padding: 0.45rem 0.3rem;
         }
-        .upcoming-day-events {
+        .upcoming-day {
             display: flex;
             flex-direction: column;
-            gap: 0.6rem;
+            gap: 0.35rem;
+            padding: 0.3rem 0;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
-        .upcoming-item {
-            padding: 0.55rem 0.65rem;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.65);
-            backdrop-filter: blur(8px);
+        .upcoming-day:last-child {
+            border-bottom: none;
         }
-        .upcoming-date {
+        .upcoming-day {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            min-width: 2.6rem;
-            justify-content: center;
+            gap: 0.35rem;
         }
-        .upcoming-date-day {
+        .upcoming-day-header {
+            display: flex;
+            align-items: baseline;
+            gap: 0.35rem;
             font-weight: 600;
-            font-size: 1.05rem;
             color: var(--text-strong);
         }
-        .upcoming-date-weekday {
+        .upcoming-day-header .day-number {
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        .upcoming-day-header .day-weekday {
             font-size: 0.7rem;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.08em;
             color: rgba(0, 0, 0, 0.45);
         }
-        .upcoming-title-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .upcoming-day-header .day-full {
+            font-size: 0.75rem;
+            color: rgba(0, 0, 0, 0.6);
+            font-weight: 400;
         }
-        .upcoming-title {
-            font-size: 0.95rem;
+        .upcoming-day-events,
+        .upcoming-modal-events {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        .event-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.35rem 1rem;
+            padding: 0.35rem 0.4rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.75);
+        }
+        .event-row.event-row-modal {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            padding: 0.45rem 0.55rem;
+        }
+        .event-row-title {
+            font-size: 0.9rem;
             font-weight: 600;
             margin: 0;
             color: var(--text-strong);
         }
-        .upcoming-meta-row {
-            margin-top: 0.2rem;
+        .event-row-meta {
+            font-size: 0.78rem;
+            color: rgba(0, 0, 0, 0.6);
+        }
+        .event-row-badges {
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
+            gap: 0.25rem;
             align-items: center;
+            justify-content: flex-end;
         }
         .badge {
             display: inline-flex;
@@ -746,6 +764,10 @@ HTML_TEMPLATE = """
             border-radius: 999px;
             font-size: 0.7rem;
             font-weight: 500;
+        }
+        .badge-xs {
+            font-size: 0.65rem;
+            padding: 0.15rem 0.5rem;
         }
         .badge-course {
             background: rgba(99, 102, 241, 0.1);
@@ -759,15 +781,9 @@ HTML_TEMPLATE = """
             font-size: 0.75rem;
             color: rgba(0, 0, 0, 0.55);
         }
-        .upcoming-time-row {
-            margin-top: 0.2rem;
-            font-size: 0.82rem;
+        .upcoming-time {
+            font-size: 0.78rem;
             color: rgba(0, 0, 0, 0.65);
-        }
-        .upcoming-prep {
-            margin-top: 0.3rem;
-            font-size: 0.75rem;
-            color: rgba(0, 0, 0, 0.55);
         }
         .upcoming-footer {
             margin-top: 0.75rem;
@@ -956,42 +972,15 @@ HTML_TEMPLATE = """
             flex-direction: column;
             gap: 1rem;
         }
-        .upcoming-modal-day-label {
-            margin: 0 0 0.4rem;
-            font-weight: 600;
-            color: var(--text-strong);
-        }
-        .upcoming-modal-events {
+        .upcoming-modal-day {
             display: flex;
             flex-direction: column;
-            gap: 0.6rem;
+            gap: 0.4rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
-        .upcoming-modal-item {
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            border-radius: 14px;
-            padding: 0.75rem 0.85rem;
-            background: #ffffff;
-        }
-        .upcoming-modal-item-title {
-            font-weight: 600;
-            margin: 0;
-        }
-        .upcoming-modal-item-meta {
-            margin-top: 0.2rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.35rem;
-            align-items: center;
-        }
-        .upcoming-modal-item-time {
-            margin-top: 0.25rem;
-            font-size: 0.85rem;
-            color: rgba(17, 24, 39, 0.75);
-        }
-        .upcoming-modal-item-prep {
-            margin-top: 0.25rem;
-            font-size: 0.78rem;
-            color: rgba(55, 65, 81, 0.75);
+        .upcoming-modal-day:last-child {
+            border-bottom: none;
         }
         @media (max-width: 900px) {
             .calendar-dialog {
@@ -1166,16 +1155,11 @@ HTML_TEMPLATE = """
             .card-body {
                 padding: 20px;
             }
-            .upcoming-item {
+            .event-row {
                 grid-template-columns: 1fr;
             }
-            .upcoming-date {
-                flex-direction: row;
+            .event-row-badges {
                 justify-content: flex-start;
-                gap: 0.4rem;
-            }
-            .upcoming-date-day {
-                font-size: 0.95rem;
             }
         }
     </style>
@@ -1291,33 +1275,28 @@ HTML_TEMPLATE = """
                         <div class="upcoming-list">
                             {% if upcoming_card_days and upcoming_card_days|length > 0 %}
                                 {% for day in upcoming_card_days %}
-                                <div class="upcoming-day-block">
-                                    <div class="upcoming-date">
-                                        <div class="upcoming-date-day">{{ day.day_label }}</div>
-                                        <div class="upcoming-date-weekday">{{ day.weekday }}</div>
+                                <div class="upcoming-day">
+                                    <div class="upcoming-day-header">
+                                        <span class="day-number">{{ day.day_label }}</span>
+                                        <span class="day-weekday">{{ day.weekday }}</span>
                                     </div>
                                     <div class="upcoming-day-events">
                                         {% for event in day.events %}
-                                        <article class="upcoming-item">
-                                            <div class="upcoming-main">
-                                                <div class="upcoming-title-row">
-                                                    <h3 class="upcoming-title">{{ event.title }}</h3>
-                                                </div>
-                                                <div class="upcoming-meta-row">
-                                                    <span class="badge badge-course">{{ event.course_short }}</span>
-                                                    <span class="badge badge-kind">{{ event.kind }}</span>
-                                                    {% if event.location %}
-                                                    <span class="upcoming-location">{{ event.location }}</span>
-                                                    {% endif %}
-                                                </div>
-                                                <div class="upcoming-time-row">
+                                        <div class="event-row">
+                                            <div>
+                                                <p class="event-row-title">{{ event.title }}</p>
+                                                <p class="event-row-meta">
                                                     <span class="upcoming-time">{{ event.time_label }}</span>
-                                                </div>
-                                                {% if event.prep_estimate %}
-                                                <div class="upcoming-prep">{{ event.prep_estimate }}</div>
-                                                {% endif %}
+                                                    {% if event.location %}
+                                                        · <span class="upcoming-location">{{ event.location }}</span>
+                                                    {% endif %}
+                                                </p>
                                             </div>
-                                        </article>
+                                            <div class="event-row-badges">
+                                                <span class="badge badge-course badge-xs">{{ event.course_short }}</span>
+                                                <span class="badge badge-kind badge-xs">{{ event.kind }}</span>
+                                            </div>
+                                        </div>
                                         {% endfor %}
                                     </div>
                                 </div>
@@ -1438,23 +1417,28 @@ HTML_TEMPLATE = """
                 {% if upcoming_all_events and upcoming_all_events|length > 0 %}
                     {% for day in upcoming_all_events %}
                     <div class="upcoming-modal-day">
-                        <p class="upcoming-modal-day-label">{{ day.full_label }}</p>
+                        <div class="upcoming-day-header">
+                            <span class="day-number">{{ day.day_label }}</span>
+                            <span class="day-weekday">{{ day.weekday }}</span>
+                            <span class="day-full">{{ day.full_label }}</span>
+                        </div>
                         <div class="upcoming-modal-events">
                             {% for event in day.events %}
-                            <article class="upcoming-modal-item">
-                                <div class="upcoming-modal-item-title">{{ event.title }}</div>
-                                <div class="upcoming-modal-item-meta">
-                                    <span class="badge badge-course">{{ event.course_short }}</span>
-                                    <span class="badge badge-kind">{{ event.kind }}</span>
-                                    {% if event.location %}
-                                    <span class="upcoming-location">{{ event.location }}</span>
-                                    {% endif %}
+                            <div class="event-row event-row-modal">
+                                <div>
+                                    <p class="event-row-title">{{ event.title }}</p>
+                                    <p class="event-row-meta">
+                                        <span class="upcoming-time">{{ event.time_label }}</span>
+                                        {% if event.location %}
+                                            · <span class="upcoming-location">{{ event.location }}</span>
+                                        {% endif %}
+                                    </p>
                                 </div>
-                                <div class="upcoming-modal-item-time">{{ event.time_label }}</div>
-                                {% if event.prep_estimate %}
-                                <div class="upcoming-modal-item-prep">{{ event.prep_estimate }}</div>
-                                {% endif %}
-                            </article>
+                                <div class="event-row-badges">
+                                    <span class="badge badge-course badge-xs">{{ event.course_short }}</span>
+                                    <span class="badge badge-kind badge-xs">{{ event.kind }}</span>
+                                </div>
+                            </div>
                             {% endfor %}
                         </div>
                     </div>
