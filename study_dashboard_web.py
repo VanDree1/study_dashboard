@@ -244,6 +244,8 @@ SECTION_CONFIG: Tuple[Tuple[str, str, str], ...] = (
     ("LATER", "Later", "#d7e8ff"),
 )
 
+UPCOMING_DEFAULT_LIMIT = 3
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -670,6 +672,17 @@ HTML_TEMPLATE = """
             background: #dfe6ff;
             transform: translateY(-1px);
         }
+        .upcoming-toggle-btn {
+            border: none;
+            background: transparent;
+            color: #1f3fb0;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
         .schedule-list {
             display: flex;
             flex-direction: column;
@@ -685,15 +698,15 @@ HTML_TEMPLATE = """
             left: 0;
             right: 0;
             bottom: 0;
-            height: 60px;
+            height: 40px;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0), #fff);
             pointer-events: none;
         }
-        .schedule-list[data-compact="true"] {
+        .schedule-list[data-expanded="true"] {
             max-height: none;
             padding-bottom: 0;
         }
-        .schedule-list[data-compact="true"]::after {
+        .schedule-list[data-expanded="true"]::after {
             display: none;
         }
         .schedule-row {
@@ -702,6 +715,9 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             border-bottom: 1px solid #f0f0f4;
             padding-bottom: 14px;
+        }
+        .schedule-list[data-expanded="false"] .schedule-row.extra-event {
+            display: none;
         }
         .schedule-row:last-child {
             border-bottom: none;
@@ -1113,10 +1129,11 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
                     <div class="card-body schedule-card-body">
-                        <div class="schedule-list" data-compact="true">
-                            {% if next_schedule_events %}
-                                {% for event in next_schedule_events %}
-                                <div class="schedule-row">
+                        {% set total_events = upcoming_events_all_courses|length %}
+                        <div class="schedule-list" id="upcoming-events-list" data-expanded="false">
+                            {% if upcoming_events_all_courses %}
+                                {% for event in upcoming_events_all_courses %}
+                                <div class="schedule-row{% if loop.index > upcoming_default_limit %} extra-event{% endif %}">
                                     <div class="schedule-main">
                                         <p class="schedule-time">{{ event.date_label }} · {{ event.weekday }}</p>
                                         <p class="schedule-title">{{ event.title }}</p>
@@ -1132,7 +1149,21 @@ HTML_TEMPLATE = """
                                 <p class="placeholder">No upcoming events.</p>
                             {% endif %}
                         </div>
-                        <div style="text-align: right; margin-top: 16px;">
+                        {% if total_events > upcoming_default_limit %}
+                        <div style="text-align: right; margin-top: 8px;">
+                            <button
+                                class="upcoming-toggle-btn"
+                                type="button"
+                                id="upcoming-toggle"
+                                aria-expanded="false"
+                                data-hide-text="Show fewer"
+                                data-show-text="Show all {{ total_events }} events ›"
+                            >
+                                Show all {{ total_events }} events ›
+                            </button>
+                        </div>
+                        {% endif %}
+                        <div style="text-align: right; margin-top: 12px;">
                             <button class="full-schedule-btn" type="button" id="upcoming-open-calendar">Open full calendar ▸</button>
                         </div>
                     </div>
@@ -1438,6 +1469,23 @@ HTML_TEMPLATE = """
             var upcomingOpenCalendar = document.getElementById("upcoming-open-calendar");
             if (upcomingOpenCalendar) {
                 upcomingOpenCalendar.addEventListener("click", openOverlay);
+            }
+            var upcomingToggle = document.getElementById("upcoming-toggle");
+            var upcomingList = document.getElementById("upcoming-events-list");
+            if (upcomingToggle && upcomingList) {
+                function updateToggleButton(expanded) {
+                    var showText = upcomingToggle.getAttribute("data-show-text") || "Show more";
+                    var hideText = upcomingToggle.getAttribute("data-hide-text") || "Show fewer";
+                    upcomingToggle.textContent = expanded ? hideText : showText;
+                    upcomingToggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+                }
+                upcomingToggle.addEventListener("click", function () {
+                    var expanded = upcomingList.getAttribute("data-expanded") === "true";
+                    var nextState = !expanded;
+                    upcomingList.setAttribute("data-expanded", nextState ? "true" : "false");
+                    updateToggleButton(nextState);
+                });
+                updateToggleButton(false);
             }
             document.querySelectorAll(".mini-calendar-nav").forEach(function (navButton) {
                 navButton.addEventListener("click", function (event) {
@@ -2162,9 +2210,13 @@ def dashboard() -> str:
     study_schedule_upcoming = get_upcoming_schedule(
         all_courses_schedule_sorted, today
     )
-    next_schedule_events = get_upcoming_events_all_courses(
-        all_courses_schedule_sorted, today, limit=5
-    )
+    total_future_events = len(study_schedule_upcoming)
+    if total_future_events == 0:
+        upcoming_events_all_courses: List[Dict[str, object]] = []
+    else:
+        upcoming_events_all_courses = get_upcoming_events_all_courses(
+            all_courses_schedule_sorted, today, limit=total_future_events
+        )
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
     mini_month_param = request.args.get("mini_month", "")
     target_year: int | None = None
@@ -2222,7 +2274,8 @@ def dashboard() -> str:
         all_courses_schedule_week_grouped=week_grouped,
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
-        next_schedule_events=next_schedule_events,
+        upcoming_events_all_courses=upcoming_events_all_courses,
+        upcoming_default_limit=UPCOMING_DEFAULT_LIMIT,
         calendar_events_data=calendar_events_data,
         mini_calendar=mini_calendar,
     )
