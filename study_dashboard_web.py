@@ -683,7 +683,7 @@ HTML_TEMPLATE = """
         }
         .upcoming-preview-body {
             max-height: 260px;
-            overflow: hidden;
+            overflow-y: hidden;
         }
         .upcoming-list {
             display: flex;
@@ -741,10 +741,68 @@ HTML_TEMPLATE = """
         .preview-location {
             color: rgba(0, 0, 0, 0.55);
         }
+        .upcoming-day-header {
+            display: flex;
+            align-items: baseline;
+            gap: 0.35rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .upcoming-day-header .day-number {
+            font-size: 1.1rem;
+            line-height: 1;
+        }
+        .upcoming-day-header .day-weekday {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(0, 0, 0, 0.45);
+        }
+        .upcoming-day-header .day-full {
+            font-size: 0.75rem;
+            color: rgba(0, 0, 0, 0.6);
+            font-weight: 400;
+        }
         .upcoming-modal-events {
             display: flex;
             flex-direction: column;
             gap: 0.35rem;
+        }
+        .upcoming-modal-card {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 14px;
+            padding: 0.75rem 0.9rem;
+            background: #ffffff;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        .upcoming-modal-card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.6rem;
+            align-items: flex-start;
+        }
+        .upcoming-modal-card-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .modal-card-badges {
+            display: flex;
+            gap: 0.35rem;
+        }
+        .upcoming-modal-card-meta {
+            margin: 0;
+            font-size: 0.85rem;
+            color: rgba(17, 24, 39, 0.75);
+        }
+        .upcoming-modal-card-prep {
+            margin: 0;
+            font-size: 0.8rem;
+            color: rgba(55, 65, 81, 0.8);
         }
         .event-row {
             display: grid;
@@ -1288,39 +1346,42 @@ HTML_TEMPLATE = """
                         <p class="card-title">Upcoming – All Courses</p>
                         <p class="card-subtitle">Next few focus events across your courses</p>
                     </div>
-                    <div class="card-body upcoming-preview-body">
-                        <div class="upcoming-list">
-                            {% if upcoming_preview_events and upcoming_preview_events|length > 0 %}
-                                {% for event in upcoming_preview_events %}
-                                <div class="preview-row">
-                                    <div class="preview-date">
-                                        <span class="date-number">{{ event.day_label }}</span>
-                                        <span class="date-weekday">{{ event.weekday }}</span>
+                    <div class="card-body">
+                        <div class="upcoming-preview-body">
+                            <div class="upcoming-list">
+                                {% if upcoming_events_focus and upcoming_events_focus|length > 0 %}
+                                    {% for event in upcoming_events_focus %}
+                                    <div class="preview-row">
+                                        <div class="preview-date">
+                                            <span class="date-number">{{ event.day_label }}</span>
+                                            <span class="date-weekday">{{ event.weekday }}</span>
+                                        </div>
+                                        <div class="preview-main">
+                                            <p class="preview-title">{{ event.title }}</p>
+                                            <p class="preview-meta">{{ event.course_short }} · {{ event.kind }}</p>
+                                            <p class="preview-meta">
+                                                {{ event.time_label }}
+                                                {% if event.location %}
+                                                    · <span class="preview-location">{{ event.location }}</span>
+                                                {% endif %}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div class="preview-main">
-                                        <p class="preview-title">{{ event.title }}</p>
-                                        <p class="preview-meta">{{ event.course_short }} · {{ event.kind }}</p>
-                                        <p class="preview-meta">
-                                            {{ event.time_label }}
-                                            {% if event.location %}
-                                                · <span class="preview-location">{{ event.location }}</span>
-                                            {% endif %}
-                                        </p>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            {% else %}
-                                <p class="upcoming-empty">No upcoming events found.</p>
-                            {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="upcoming-empty">No upcoming events found.</p>
+                                {% endif %}
+                            </div>
                         </div>
-                        {% if upcoming_total_events > 0 %}
+                        {% if upcoming_events_total > 0 %}
                         <div class="upcoming-footer">
                             <button
                                 type="button"
                                 class="link-button upcoming-show-all"
+                                id="open-upcoming-modal"
                                 data-open-upcoming-schedule="true"
                             >
-                                Show full upcoming schedule ({{ upcoming_total_events }} events)
+                                Show full upcoming schedule ({{ upcoming_events_total }} events)
                             </button>
                         </div>
                         {% endif %}
@@ -1422,8 +1483,8 @@ HTML_TEMPLATE = """
                 <button class="upcoming-modal-close" type="button" id="upcoming-modal-close" aria-label="Close upcoming schedule">×</button>
             </div>
             <div class="upcoming-modal-body">
-                {% if upcoming_all_events and upcoming_all_events|length > 0 %}
-                    {% for day in upcoming_all_events %}
+                {% if upcoming_events_all and upcoming_events_all|length > 0 %}
+                    {% for day in upcoming_events_all %}
                     <div class="upcoming-modal-day">
                         <div class="upcoming-day-header">
                             <span class="day-number">{{ day.day_label }}</span>
@@ -1432,21 +1493,24 @@ HTML_TEMPLATE = """
                         </div>
                         <div class="upcoming-modal-events">
                             {% for event in day.events %}
-                            <div class="event-row event-row-modal">
-                                <div>
-                                    <p class="event-row-title">{{ event.title }}</p>
-                                    <p class="event-row-meta">
-                                        <span class="upcoming-time">{{ event.time_label }}</span>
-                                        {% if event.location %}
-                                            · <span class="upcoming-location">{{ event.location }}</span>
-                                        {% endif %}
-                                    </p>
+                            <article class="upcoming-modal-card">
+                                <div class="upcoming-modal-card-head">
+                                    <h3 class="upcoming-modal-card-title">{{ event.title }}</h3>
+                                    <div class="modal-card-badges">
+                                        <span class="badge badge-course">{{ event.course_short }}</span>
+                                        <span class="badge badge-kind">{{ event.kind }}</span>
+                                    </div>
                                 </div>
-                                <div class="event-row-badges">
-                                    <span class="badge badge-course badge-xs">{{ event.course_short }}</span>
-                                    <span class="badge badge-kind badge-xs">{{ event.kind }}</span>
-                                </div>
-                            </div>
+                                <p class="upcoming-modal-card-meta">
+                                    {{ event.time_label }}
+                                    {% if event.location %}
+                                        · <span class="upcoming-location">{{ event.location }}</span>
+                                    {% endif %}
+                                </p>
+                                {% if event.prep_estimate %}
+                                <p class="upcoming-modal-card-prep">{{ event.prep_estimate }}</p>
+                                {% endif %}
+                            </article>
                             {% endfor %}
                         </div>
                     </div>
@@ -2845,9 +2909,9 @@ def dashboard() -> str:
         all_courses_schedule_sorted, today
     )
     upcoming_highlights = build_upcoming_highlights(all_courses_schedule_sorted, max_items=5)
-    upcoming_preview_events = build_upcoming_preview_events(study_schedule_upcoming, today, limit=3)
-    upcoming_all_events = build_upcoming_modal_days(study_schedule_upcoming, today)
-    upcoming_total_events = sum(len(day["events"]) for day in upcoming_all_events)
+    upcoming_events_focus = build_upcoming_preview_events(study_schedule_upcoming, today, limit=3)
+    upcoming_events_all = build_upcoming_modal_days(study_schedule_upcoming, today)
+    upcoming_events_total = sum(len(day["events"]) for day in upcoming_events_all)
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
     mini_month_param = request.args.get("mini_month", "")
     target_year: int | None = None
@@ -2885,9 +2949,9 @@ def dashboard() -> str:
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
         upcoming_highlights=upcoming_highlights,
-        upcoming_preview_events=upcoming_preview_events,
-        upcoming_all_events=upcoming_all_events,
-        upcoming_total_events=upcoming_total_events,
+        upcoming_events_focus=upcoming_events_focus,
+        upcoming_events_all=upcoming_events_all,
+        upcoming_events_total=upcoming_events_total,
         calendar_events_data=calendar_events_data,
         mini_calendar=mini_calendar,
         today_iso=today.isoformat(),
