@@ -681,49 +681,66 @@ HTML_TEMPLATE = """
             color: rgba(0, 0, 0, 0.55);
             margin-top: 0.15rem;
         }
+        .upcoming-preview-body {
+            max-height: 260px;
+            overflow: hidden;
+        }
         .upcoming-list {
             display: flex;
             flex-direction: column;
-            gap: 0.8rem;
+            gap: 0.5rem;
         }
-        .upcoming-day {
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-            padding: 0.3rem 0;
+        .preview-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.6rem;
+            padding: 0.4rem 0.2rem;
             border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
-        .upcoming-day:last-child {
+        .preview-row:last-child {
             border-bottom: none;
         }
-        .upcoming-day {
+        .preview-date {
+            min-width: 2.6rem;
             display: flex;
             flex-direction: column;
-            gap: 0.35rem;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem 0.3rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.7);
         }
-        .upcoming-day-header {
-            display: flex;
-            align-items: baseline;
-            gap: 0.35rem;
+        .preview-date .date-number {
             font-weight: 600;
+            font-size: 1rem;
             color: var(--text-strong);
-        }
-        .upcoming-day-header .day-number {
-            font-size: 1.1rem;
             line-height: 1;
         }
-        .upcoming-day-header .day-weekday {
-            font-size: 0.7rem;
+        .preview-date .date-weekday {
+            font-size: 0.65rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: rgba(0, 0, 0, 0.45);
         }
-        .upcoming-day-header .day-full {
-            font-size: 0.75rem;
-            color: rgba(0, 0, 0, 0.6);
-            font-weight: 400;
+        .preview-main {
+            display: flex;
+            flex-direction: column;
+            gap: 0.12rem;
         }
-        .upcoming-day-events,
+        .preview-title {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .preview-meta {
+            margin: 0;
+            font-size: 0.78rem;
+            color: rgba(0, 0, 0, 0.6);
+        }
+        .preview-location {
+            color: rgba(0, 0, 0, 0.55);
+        }
         .upcoming-modal-events {
             display: flex;
             flex-direction: column;
@@ -1271,33 +1288,24 @@ HTML_TEMPLATE = """
                         <p class="card-title">Upcoming – All Courses</p>
                         <p class="card-subtitle">Next few focus events across your courses</p>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body upcoming-preview-body">
                         <div class="upcoming-list">
-                            {% if upcoming_card_days and upcoming_card_days|length > 0 %}
-                                {% for day in upcoming_card_days %}
-                                <div class="upcoming-day">
-                                    <div class="upcoming-day-header">
-                                        <span class="day-number">{{ day.day_label }}</span>
-                                        <span class="day-weekday">{{ day.weekday }}</span>
+                            {% if upcoming_preview_events and upcoming_preview_events|length > 0 %}
+                                {% for event in upcoming_preview_events %}
+                                <div class="preview-row">
+                                    <div class="preview-date">
+                                        <span class="date-number">{{ event.day_label }}</span>
+                                        <span class="date-weekday">{{ event.weekday }}</span>
                                     </div>
-                                    <div class="upcoming-day-events">
-                                        {% for event in day.events %}
-                                        <div class="event-row">
-                                            <div>
-                                                <p class="event-row-title">{{ event.title }}</p>
-                                                <p class="event-row-meta">
-                                                    <span class="upcoming-time">{{ event.time_label }}</span>
-                                                    {% if event.location %}
-                                                        · <span class="upcoming-location">{{ event.location }}</span>
-                                                    {% endif %}
-                                                </p>
-                                            </div>
-                                            <div class="event-row-badges">
-                                                <span class="badge badge-course badge-xs">{{ event.course_short }}</span>
-                                                <span class="badge badge-kind badge-xs">{{ event.kind }}</span>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
+                                    <div class="preview-main">
+                                        <p class="preview-title">{{ event.title }}</p>
+                                        <p class="preview-meta">{{ event.course_short }} · {{ event.kind }}</p>
+                                        <p class="preview-meta">
+                                            {{ event.time_label }}
+                                            {% if event.location %}
+                                                · <span class="preview-location">{{ event.location }}</span>
+                                            {% endif %}
+                                        </p>
                                     </div>
                                 </div>
                                 {% endfor %}
@@ -2609,6 +2617,13 @@ def _format_event_display(event: Dict[str, object]) -> Dict[str, object]:
             time_label = f"{time_label} – {end_dt.strftime('%H:%M')}"
     else:
         time_label = str(event.get("time_display") or "Time TBA")
+    day_label = ""
+    weekday_short = ""
+    full_day = ""
+    if isinstance(start_dt, datetime):
+        day_label = start_dt.strftime("%d")
+        weekday_short = start_dt.strftime("%a")
+        full_day = start_dt.strftime("%A, %d %B %Y")
     display = {
         "id": event.get("id"),
         "title": event.get("title"),
@@ -2622,6 +2637,9 @@ def _format_event_display(event: Dict[str, object]) -> Dict[str, object]:
         "has_time": has_time,
         "start_dt": start_dt,
         "end_dt": end_dt,
+        "day_label": day_label,
+        "weekday": weekday_short,
+        "full_day_label": full_day,
     }
     return display
 
@@ -2656,10 +2674,18 @@ def _group_future_events_by_date(
     return grouped
 
 
-def build_upcoming_card_days(
-    events: List[Dict[str, object]], today: date, max_days: int = 3
+def build_upcoming_preview_events(
+    events: List[Dict[str, object]], today: date, limit: int = 3
 ) -> List[Dict[str, object]]:
-    return _group_future_events_by_date(events, today, max_days=max_days)
+    preview_events: List[Dict[str, object]] = []
+    count = 0
+    for day in _group_future_events_by_date(events, today, max_days=None):
+        for event in day["events"]:
+            preview_events.append(event)
+            count += 1
+            if count >= limit:
+                return preview_events
+    return preview_events
 
 
 def build_upcoming_modal_days(
@@ -2819,7 +2845,7 @@ def dashboard() -> str:
         all_courses_schedule_sorted, today
     )
     upcoming_highlights = build_upcoming_highlights(all_courses_schedule_sorted, max_items=5)
-    upcoming_card_days = build_upcoming_card_days(study_schedule_upcoming, today, max_days=3)
+    upcoming_preview_events = build_upcoming_preview_events(study_schedule_upcoming, today, limit=3)
     upcoming_all_events = build_upcoming_modal_days(study_schedule_upcoming, today)
     upcoming_total_events = sum(len(day["events"]) for day in upcoming_all_events)
     calendar_events_data = build_calendar_events_data(all_courses_schedule_sorted)
@@ -2859,7 +2885,7 @@ def dashboard() -> str:
         all_courses_schedule_fallback_grouped=fallback_grouped,
         all_courses_schedule_full_grouped=full_grouped,
         upcoming_highlights=upcoming_highlights,
-        upcoming_card_days=upcoming_card_days,
+        upcoming_preview_events=upcoming_preview_events,
         upcoming_all_events=upcoming_all_events,
         upcoming_total_events=upcoming_total_events,
         calendar_events_data=calendar_events_data,
