@@ -673,13 +673,50 @@ HTML_TEMPLATE = """
             display: flex;
             flex-direction: column;
         }
-        .card-upcoming-all .card-header {
+        .card-header-upcoming {
             margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.75rem;
         }
-        .card-upcoming-all .card-subtitle {
+        .upcoming-header-main {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .upcoming-count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 0.35rem;
+            min-width: 1.4rem;
+            height: 1.4rem;
+            padding: 0 0.45rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #0f172a;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        }
+        .upcoming-header-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+        }
+        .upcoming-viewall {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #3b82f6;
             font-size: 0.85rem;
-            color: rgba(0, 0, 0, 0.55);
-            margin-top: 0.15rem;
+            font-weight: 500;
+            cursor: pointer;
+            opacity: 0.9;
+        }
+        .upcoming-viewall:hover {
+            opacity: 1;
         }
         .upcoming-preview-body {
             max-height: 260px;
@@ -859,23 +896,6 @@ HTML_TEMPLATE = """
         .upcoming-time {
             font-size: 0.78rem;
             color: rgba(0, 0, 0, 0.65);
-        }
-        .upcoming-footer {
-            margin-top: 0.75rem;
-            display: flex;
-            justify-content: flex-end;
-        }
-        .link-button.upcoming-show-all {
-            background: none;
-            border: none;
-            color: #2563eb;
-            font-size: 0.82rem;
-            font-weight: 600;
-            cursor: pointer;
-            padding: 0;
-        }
-        .link-button.upcoming-show-all:hover {
-            text-decoration: underline;
         }
         .upcoming-empty {
             margin: 0;
@@ -1342,9 +1362,27 @@ HTML_TEMPLATE = """
             </div>
             <div>
                 <section class="card card-upcoming-all">
-                    <div class="card-header header-soft-sky">
-                        <p class="card-title">Upcoming – All Courses</p>
-                        <p class="card-subtitle">Next few focus events across your courses</p>
+                    <div class="card-header header-soft-sky card-header-upcoming">
+                        <div class="upcoming-header-main">
+                            <p class="card-title">
+                                Upcoming – All Courses
+                                {% if upcoming_events_total > 0 %}
+                                <span class="upcoming-count-badge">{{ upcoming_events_total }}</span>
+                                {% endif %}
+                            </p>
+                            <p class="card-subtitle">Next few focus events across your courses</p>
+                        </div>
+                        {% if upcoming_events_total > 0 %}
+                        <div class="upcoming-header-actions">
+                            <button
+                                type="button"
+                                class="upcoming-viewall"
+                                data-open-upcoming-schedule="true"
+                            >
+                                View all ▸
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="card-body">
                         <div class="upcoming-preview-body">
@@ -1373,18 +1411,6 @@ HTML_TEMPLATE = """
                                 {% endif %}
                             </div>
                         </div>
-                        {% if upcoming_events_total > 0 %}
-                        <div class="upcoming-footer">
-                            <button
-                                type="button"
-                                class="link-button upcoming-show-all"
-                                id="open-upcoming-modal"
-                                data-open-upcoming-schedule="true"
-                            >
-                                Show full upcoming schedule ({{ upcoming_events_total }} events)
-                            </button>
-                        </div>
-                        {% endif %}
                     </div>
                 </section>
                 <section class="card assistant-card">
