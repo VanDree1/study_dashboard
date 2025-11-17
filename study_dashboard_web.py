@@ -12,7 +12,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from flask import Flask, jsonify, render_template_string, request, url_for
+from flask import Flask, jsonify, render_template_string, request
 from openai import OpenAI
 
 from study_dashboard import (
@@ -424,6 +424,7 @@ HTML_TEMPLATE = """
             height: 28px;
             border-radius: 999px;
             background: #eef0f7;
+            border: none;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -460,6 +461,14 @@ HTML_TEMPLATE = """
             background: rgba(244, 245, 248, 0.9);
             font-size: 13px;
             color: #2b2f40;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+        }
+        .mini-day:focus-visible {
+            outline: 2px solid rgba(87, 123, 255, 0.5);
+            outline-offset: 2px;
         }
         .mini-day.has-events {
             background: #ffffff;
@@ -467,9 +476,15 @@ HTML_TEMPLATE = """
         }
         .mini-day.is-today {
             box-shadow: inset 0 0 0 2px rgba(87, 123, 255, 0.4);
+            background: #f0f4ff;
+        }
+        .mini-day.is-selected {
+            box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5);
+            background: #e9efff;
         }
         .mini-day.is-placeholder {
             background: transparent;
+            pointer-events: none;
         }
         .mini-day-number {
             display: block;
@@ -929,6 +944,13 @@ HTML_TEMPLATE = """
             box-shadow: 0 0 0 2px #7a89ff;
             background: #ffffff;
         }
+        .calendar-cell.is-today {
+            box-shadow: 0 0 0 2px rgba(87, 123, 255, 0.5);
+            background: #eef2ff;
+        }
+        .calendar-cell.is-past {
+            opacity: 0.55;
+        }
         .calendar-date {
             font-weight: 600;
             color: var(--text-strong);
@@ -1194,20 +1216,22 @@ HTML_TEMPLATE = """
                 >
                     <div class="mini-calendar-header">
                         <div>
-                            <p class="mini-calendar-title">{{ mini_calendar.month_label }}</p>
+                            <p class="mini-calendar-title" id="mini-calendar-title">{{ mini_calendar.month_label }}</p>
                             <p class="mini-calendar-subtitle">Tap to view the full calendar</p>
                         </div>
                         <div class="mini-calendar-controls">
-                            <a
-                                href="{{ mini_calendar.prev_url }}"
+                            <button
+                                type="button"
                                 class="mini-calendar-nav"
+                                data-mini-nav="prev"
                                 aria-label="Previous month"
-                            >‹</a>
-                            <a
-                                href="{{ mini_calendar.next_url }}"
+                            >‹</button>
+                            <button
+                                type="button"
                                 class="mini-calendar-nav"
+                                data-mini-nav="next"
                                 aria-label="Next month"
-                            >›</a>
+                            >›</button>
                         </div>
                     </div>
                     <div class="mini-calendar-weekdays">
@@ -1215,37 +1239,7 @@ HTML_TEMPLATE = """
                         <span>{{ label }}</span>
                         {% endfor %}
                     </div>
-                    <div class="mini-calendar-grid">
-                        {% for day in mini_calendar.days %}
-                            {% if day.is_current_month %}
-                            <div class="mini-day{% if day.is_today %} is-today{% endif %}{% if day.has_events %} has-events{% endif %}">
-                                <span class="mini-day-number">{{ day.day_number }}</span>
-                                {% if day.event_types %}
-                                <div class="mini-day-dots">
-                                    {% for type in day.event_types %}
-                                    <span class="event-dot event-{{ type }}"></span>
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                                {% if day.events %}
-                                <div class="mini-day-tooltip">
-                                    <p class="mini-tooltip-date">{{ day.full_label }}</p>
-                                    <ul class="mini-tooltip-list">
-                                        {% for event in day.events %}
-                                        <li class="mini-tooltip-item">
-                                            <strong>{{ event.course_short }}</strong> · {{ event.type }}<br />
-                                            {{ event.title }}<span class="mini-tooltip-meta">{{ event.time }}{% if event.location %} · {{ event.location }}{% endif %}</span>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% else %}
-                            <div class="mini-day is-placeholder"></div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
+                    <div class="mini-calendar-grid" id="mini-calendar-grid"></div>
                 </section>
             </div>
         </div>
@@ -1298,58 +1292,279 @@ HTML_TEMPLATE = """
                     return aKey.localeCompare(bKey);
                 });
             });
+
+            var todayIso = "{{ today_iso }}";
+            var initialYear = {{ mini_calendar.year }};
+            var initialMonth = {{ mini_calendar.month }};
             var overlay = document.getElementById("calendar-overlay");
-            var openBtn = document.getElementById("open-calendar-btn");
-            var closeBtn = document.getElementById("calendar-close");
-            var backdrop = document.getElementById("calendar-backdrop");
-            var grid = document.getElementById("calendar-grid");
-            var monthLabel = document.getElementById("calendar-month-label");
+            var miniGrid = document.getElementById("mini-calendar-grid");
+            var miniTitle = document.getElementById("mini-calendar-title");
+            var miniCalendarCard = document.getElementById("mini-calendar-card");
+            var miniNavButtons = document.querySelectorAll("[data-mini-nav]");
+            var calendarGrid = document.getElementById("calendar-grid");
             var detailHeading = document.getElementById("calendar-detail-heading");
             var detailList = document.getElementById("calendar-detail-list");
             var detailEmpty = document.getElementById("calendar-detail-empty");
+            var monthLabel = document.getElementById("calendar-month-label");
+            var openBtn = document.getElementById("open-calendar-btn");
+            var upcomingOpenCalendar = document.getElementById("upcoming-open-calendar");
+            var closeBtn = document.getElementById("calendar-close");
+            var backdrop = document.getElementById("calendar-backdrop");
             var navButtons = document.querySelectorAll("[data-calendar-nav]");
-            var currentDate = new Date();
-            var eventDates = Object.keys(eventsByDate).sort();
-            var todayIso = new Date().toISOString().split("T")[0];
-            var selectedDate = null;
-            if (eventDates.length) {
-                if (eventsByDate[todayIso]) {
-                    currentDate = new Date(todayIso);
-                    selectedDate = todayIso;
-                } else {
-                    currentDate = new Date(eventDates[0]);
-                    selectedDate = eventDates[0];
+            var upcomingToggle = document.getElementById("upcoming-toggle");
+            var upcomingList = document.getElementById("upcoming-events-list");
+
+            var calendarState = {
+                currentYear: initialYear,
+                currentMonth: initialMonth,
+                selectedDate: null,
+                todayIso: todayIso,
+                eventsByDate: eventsByDate,
+            };
+
+            function pad(value) {
+                return String(value).padStart(2, "0");
+            }
+
+            function monthPrefix(year, month) {
+                return year + "-" + pad(month);
+            }
+
+            function formatMonthYear(year, month) {
+                var formatter = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+                return formatter.format(new Date(year, month - 1, 1));
+            }
+
+            function buildMiniCells(year, month) {
+                var firstDay = new Date(year, month - 1, 1);
+                var startWeekday = (firstDay.getDay() + 6) % 7;
+                var daysInMonth = new Date(year, month, 0).getDate();
+                var cells = [];
+                for (var i = 0; i < startWeekday; i++) {
+                    cells.push({ placeholder: true });
                 }
+                for (var day = 1; day <= daysInMonth; day++) {
+                    var iso = monthPrefix(year, month) + "-" + pad(day);
+                    cells.push({
+                        placeholder: false,
+                        iso: iso,
+                        dayNumber: day,
+                        year: year,
+                        month: month,
+                        events: eventsByDate[iso] || [],
+                        isToday: iso === todayIso,
+                    });
+                }
+                while (cells.length % 7 !== 0) {
+                    cells.push({ placeholder: true });
+                }
+                return cells;
             }
-            function updateBodyLock(state) {
-                document.body.style.overflow = state ? "hidden" : "";
+
+            function buildFullCells(year, month) {
+                var firstOfMonth = new Date(year, month - 1, 1);
+                var startDay = (firstOfMonth.getDay() + 6) % 7;
+                var startDate = new Date(year, month - 1, 1 - startDay);
+                var cells = [];
+                for (var i = 0; i < 42; i++) {
+                    var cellDate = new Date(startDate);
+                    cellDate.setDate(startDate.getDate() + i);
+                    var iso = cellDate.toISOString().split("T")[0];
+                    cells.push({
+                        iso: iso,
+                        dayNumber: cellDate.getDate(),
+                        year: cellDate.getFullYear(),
+                        month: cellDate.getMonth() + 1,
+                        isCurrentMonth:
+                            cellDate.getFullYear() === year && cellDate.getMonth() + 1 === month,
+                        isToday: iso === todayIso,
+                        events: eventsByDate[iso] || [],
+                    });
+                }
+                return cells;
             }
-            function renderDetail() {
+
+            function ensureSelectedDateForMonth(force) {
+                var prefix = monthPrefix(calendarState.currentYear, calendarState.currentMonth);
+                if (!force && calendarState.selectedDate && calendarState.selectedDate.startsWith(prefix)) {
+                    return;
+                }
+                if (calendarState.todayIso && calendarState.todayIso.startsWith(prefix)) {
+                    calendarState.selectedDate = calendarState.todayIso;
+                    return;
+                }
+                var monthEvents = Object.keys(eventsByDate)
+                    .filter(function (date) {
+                        return date.startsWith(prefix);
+                    })
+                    .sort();
+                if (monthEvents.length) {
+                    calendarState.selectedDate = monthEvents[0];
+                    return;
+                }
+                calendarState.selectedDate = prefix + "-01";
+            }
+
+            ensureSelectedDateForMonth(false);
+
+            function createTooltip(events, iso) {
+                if (!events.length) {
+                    return null;
+                }
+                var tooltip = document.createElement("div");
+                tooltip.className = "mini-day-tooltip";
+                var tooltipDate = document.createElement("p");
+                tooltipDate.className = "mini-tooltip-date";
+                tooltipDate.textContent = new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                });
+                tooltip.appendChild(tooltipDate);
+                var list = document.createElement("ul");
+                list.className = "mini-tooltip-list";
+                events.forEach(function (eventItem) {
+                    var listItem = document.createElement("li");
+                    listItem.className = "mini-tooltip-item";
+                    var heading = document.createElement("div");
+                    var strong = document.createElement("strong");
+                    strong.textContent = eventItem.course_short;
+                    heading.appendChild(strong);
+                    heading.appendChild(document.createTextNode(" · " + eventItem.type));
+                    listItem.appendChild(heading);
+                    var title = document.createElement("div");
+                    title.textContent = eventItem.title;
+                    listItem.appendChild(title);
+                    var meta = document.createElement("span");
+                    meta.className = "mini-tooltip-meta";
+                    var timeLabel = "";
+                    if (eventItem.start_time && eventItem.end_time) {
+                        timeLabel = eventItem.start_time + "–" + eventItem.end_time;
+                    } else if (eventItem.start_time) {
+                        timeLabel = eventItem.start_time;
+                    } else if (eventItem.time_display) {
+                        timeLabel = eventItem.time_display;
+                    }
+                    meta.textContent = timeLabel + (eventItem.location ? " · " + eventItem.location : "");
+                    listItem.appendChild(meta);
+                    list.appendChild(listItem);
+                });
+                tooltip.appendChild(list);
+                return tooltip;
+            }
+
+            function renderMiniCalendar() {
+                if (!miniGrid || !miniTitle) {
+                    return;
+                }
+                miniTitle.textContent = formatMonthYear(calendarState.currentYear, calendarState.currentMonth);
+                miniGrid.innerHTML = "";
+                var cells = buildMiniCells(calendarState.currentYear, calendarState.currentMonth);
+                cells.forEach(function (cell) {
+                    if (cell.placeholder) {
+                        var placeholder = document.createElement("div");
+                        placeholder.className = "mini-day is-placeholder";
+                        miniGrid.appendChild(placeholder);
+                        return;
+                    }
+                    var button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "mini-day";
+                    if (cell.events.length) {
+                        button.classList.add("has-events");
+                    }
+                    if (cell.isToday) {
+                        button.classList.add("is-today");
+                    }
+                    if (calendarState.selectedDate === cell.iso) {
+                        button.classList.add("is-selected");
+                    }
+                    button.setAttribute("data-date", cell.iso);
+                    var label = document.createElement("span");
+                    label.className = "mini-day-number";
+                    label.textContent = cell.dayNumber;
+                    button.appendChild(label);
+                    if (cell.events.length) {
+                        var dots = document.createElement("div");
+                        dots.className = "mini-day-dots";
+                        var typeSet = {};
+                        cell.events.forEach(function (eventItem) {
+                            var typeClass = (
+                                eventItem.type_badge_class ||
+                                eventItem.type ||
+                                "other"
+                            )
+                                .toString()
+                                .toLowerCase()
+                                .replace(/\s+/g, "-");
+                            typeSet[typeClass] = true;
+                        });
+                        Object.keys(typeSet)
+                            .slice(0, 3)
+                            .forEach(function (typeClass) {
+                                var dot = document.createElement("span");
+                                dot.className = "event-dot event-" + typeClass;
+                                dots.appendChild(dot);
+                            });
+                        button.appendChild(dots);
+                        var tooltip = createTooltip(cell.events, cell.iso);
+                        if (tooltip) {
+                            button.appendChild(tooltip);
+                        }
+                    }
+                    button.addEventListener("click", function (event) {
+                        event.stopPropagation();
+                        calendarState.selectedDate = cell.iso;
+                        openOverlay({ forceSelection: false, scroll: true });
+                    });
+                    button.addEventListener("keydown", function (event) {
+                        if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            calendarState.selectedDate = cell.iso;
+                            openOverlay({ forceSelection: false, scroll: true });
+                        }
+                    });
+                    miniGrid.appendChild(button);
+                });
+            }
+
+            function renderEventList() {
                 if (!detailHeading || !detailList || !detailEmpty) {
                     return;
                 }
-                if (!selectedDate || !eventsByDate[selectedDate]) {
+                var iso = calendarState.selectedDate;
+                if (!iso) {
                     detailHeading.textContent = "Select a day";
                     detailList.innerHTML = "";
                     detailEmpty.style.display = "block";
                     return;
                 }
-                detailHeading.textContent = new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, {
+                detailHeading.textContent = new Date(iso + "T00:00:00").toLocaleDateString(undefined, {
                     weekday: "short",
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                 });
+                var events = eventsByDate[iso] || [];
                 detailList.innerHTML = "";
+                if (!events.length) {
+                    detailEmpty.style.display = "block";
+                    return;
+                }
                 detailEmpty.style.display = "none";
-                eventsByDate[selectedDate].forEach(function (event) {
+                events.forEach(function (event) {
                     var item = document.createElement("div");
                     item.className = "calendar-detail-item";
                     var time = document.createElement("p");
                     time.className = "calendar-detail-time";
-                    time.textContent = event.start_time
-                        ? event.start_time + (event.end_time ? "–" + event.end_time : "")
-                        : event.time_display;
+                    if (event.start_time && event.end_time) {
+                        time.textContent = event.start_time + "–" + event.end_time;
+                    } else if (event.start_time) {
+                        time.textContent = event.start_time;
+                    } else {
+                        time.textContent = event.time_display || "";
+                    }
                     var title = document.createElement("p");
                     title.className = "calendar-detail-title";
                     title.textContent = event.title;
@@ -1363,117 +1578,135 @@ HTML_TEMPLATE = """
                     detailList.appendChild(item);
                 });
             }
-            function getCalendarStart(dateObj) {
-                var start = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
-                var day = start.getDay();
-                var offset = day === 0 ? -6 : 1 - day;
-                start.setDate(start.getDate() + offset);
-                return start;
-            }
-            function trimLabel(text) {
-                if (!text) {
-                    return "";
-                }
-                return text.length > 18 ? text.slice(0, 17) + "…" : text;
-            }
-            function renderCalendarGrid() {
-                if (!grid) {
+
+            function renderFullCalendar() {
+                if (!calendarGrid) {
                     return;
                 }
+                calendarGrid.innerHTML = "";
                 if (monthLabel) {
-                    monthLabel.textContent = currentDate.toLocaleDateString(undefined, {
-                        month: "long",
-                        year: "numeric",
-                    });
+                    monthLabel.textContent = formatMonthYear(
+                        calendarState.currentYear,
+                        calendarState.currentMonth
+                    );
                 }
-                grid.innerHTML = "";
-                var start = getCalendarStart(currentDate);
-                var iterDate = new Date(start);
-                for (var i = 0; i < 42; i++) {
-                    var cellDate = new Date(iterDate);
-                    var iso = cellDate.toISOString().split("T")[0];
-                    var cell = document.createElement("button");
-                    cell.type = "button";
-                    cell.className = "calendar-cell";
-                    cell.setAttribute("data-date", iso);
-                    if (cellDate.getMonth() !== currentDate.getMonth()) {
-                        cell.classList.add("other-month");
+                var cells = buildFullCells(calendarState.currentYear, calendarState.currentMonth);
+                var currentPrefix = monthPrefix(calendarState.currentYear, calendarState.currentMonth);
+                var highlightPast = calendarState.todayIso && calendarState.todayIso.startsWith(currentPrefix);
+                cells.forEach(function (cell) {
+                    var button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "calendar-cell";
+                    if (!cell.isCurrentMonth) {
+                        button.classList.add("other-month");
                     }
-                    if (eventsByDate[iso]) {
-                        cell.classList.add("has-events");
+                    if (cell.isToday) {
+                        button.classList.add("is-today");
                     }
-                    if (selectedDate === iso) {
-                        cell.classList.add("selected");
+                    if (highlightPast && cell.isCurrentMonth && cell.iso < calendarState.todayIso) {
+                        button.classList.add("is-past");
                     }
+                    if (calendarState.selectedDate === cell.iso) {
+                        button.classList.add("selected");
+                    }
+                    button.setAttribute("data-date", cell.iso);
                     var dateLabel = document.createElement("div");
                     dateLabel.className = "calendar-date";
-                    dateLabel.textContent = cellDate.getDate();
-                    cell.appendChild(dateLabel);
-                    if (eventsByDate[iso] && eventsByDate[iso].length) {
+                    dateLabel.textContent = cell.dayNumber;
+                    button.appendChild(dateLabel);
+                    if (cell.events.length) {
                         var eventsWrap = document.createElement("div");
                         eventsWrap.className = "calendar-events";
-                        eventsByDate[iso].slice(0, 2).forEach(function (eventItem) {
+                        cell.events.slice(0, 2).forEach(function (eventItem) {
                             var chip = document.createElement("span");
                             chip.className = "calendar-chip chip-" + (eventItem.type_badge_class || "other");
                             var label = eventItem.start_time ? eventItem.start_time + " " : "";
-                            label += trimLabel(eventItem.title);
-                            chip.textContent = label;
+                            var title = eventItem.title || "";
+                            chip.textContent = label + (title.length > 18 ? title.slice(0, 17) + "…" : title);
                             eventsWrap.appendChild(chip);
                         });
-                        if (eventsByDate[iso].length > 2) {
+                        if (cell.events.length > 2) {
                             var moreChip = document.createElement("span");
                             moreChip.className = "calendar-chip more-chip";
-                            moreChip.textContent = "+" + (eventsByDate[iso].length - 2);
+                            moreChip.textContent = "+" + (cell.events.length - 2);
                             eventsWrap.appendChild(moreChip);
                         }
-                        cell.appendChild(eventsWrap);
+                        button.appendChild(eventsWrap);
                     }
-                    grid.appendChild(cell);
-                    iterDate.setDate(iterDate.getDate() + 1);
-                }
+                    button.addEventListener("click", function () {
+                        calendarState.currentYear = cell.year;
+                        calendarState.currentMonth = cell.month;
+                        calendarState.selectedDate = cell.iso;
+                        ensureSelectedDateForMonth(false);
+                        renderMiniCalendar();
+                        renderFullCalendar();
+                        renderEventList();
+                    });
+                    calendarGrid.appendChild(button);
+                });
             }
-            function renderCalendar() {
-                renderCalendarGrid();
-                renderDetail();
-            }
-            function openOverlay() {
-                if (!overlay) {
+
+            function scrollSelectedCellIntoView() {
+                if (!calendarGrid) {
                     return;
                 }
-                overlay.classList.add("open");
-                overlay.setAttribute("aria-hidden", "false");
-                updateBodyLock(true);
-                renderCalendar();
+                var selectedCell = calendarGrid.querySelector(".calendar-cell.selected");
+                if (selectedCell) {
+                    selectedCell.scrollIntoView({ block: "center" });
+                }
             }
+
+            function openOverlay(options) {
+                var opts = options || {};
+                if (opts.forceSelection) {
+                    ensureSelectedDateForMonth(true);
+                }
+                if (overlay) {
+                    overlay.classList.add("open");
+                    overlay.setAttribute("aria-hidden", "false");
+                }
+                document.body.style.overflow = "hidden";
+                renderFullCalendar();
+                renderEventList();
+                if (opts.scroll !== false) {
+                    scrollSelectedCellIntoView();
+                }
+            }
+
             function closeOverlay() {
                 if (!overlay) {
                     return;
                 }
                 overlay.classList.remove("open");
                 overlay.setAttribute("aria-hidden", "true");
-                updateBodyLock(false);
+                document.body.style.overflow = "";
             }
-            if (openBtn) {
-                openBtn.addEventListener("click", openOverlay);
+
+            function changeMonth(offset, forceSelection) {
+                var newMonth = calendarState.currentMonth + offset;
+                var newYear = calendarState.currentYear;
+                while (newMonth < 1) {
+                    newMonth += 12;
+                    newYear -= 1;
+                }
+                while (newMonth > 12) {
+                    newMonth -= 12;
+                    newYear += 1;
+                }
+                calendarState.currentMonth = newMonth;
+                calendarState.currentYear = newYear;
+                ensureSelectedDateForMonth(!!forceSelection);
+                renderMiniCalendar();
+                if (overlay && overlay.classList.contains("open")) {
+                    renderFullCalendar();
+                    renderEventList();
+                }
             }
-            var miniCalendarCard = document.getElementById("mini-calendar-card");
-            if (miniCalendarCard) {
-                miniCalendarCard.addEventListener("click", openOverlay);
-                miniCalendarCard.addEventListener("keydown", function (event) {
-                    if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        openOverlay();
-                    }
-                });
-            }
-            var upcomingOpenCalendar = document.getElementById("upcoming-open-calendar");
-            if (upcomingOpenCalendar) {
-                upcomingOpenCalendar.addEventListener("click", openOverlay);
-            }
-            var upcomingToggle = document.getElementById("upcoming-toggle");
-            var upcomingList = document.getElementById("upcoming-events-list");
-            if (upcomingToggle && upcomingList) {
-                function updateToggleButton(expanded) {
+
+            renderMiniCalendar();
+
+            if (upcomingList && upcomingToggle) {
+                function updateToggleButtonState(expanded) {
                     var showText = upcomingToggle.getAttribute("data-show-text") || "Show more";
                     var hideText = upcomingToggle.getAttribute("data-hide-text") || "Show fewer";
                     upcomingToggle.textContent = expanded ? hideText : showText;
@@ -1483,18 +1716,61 @@ HTML_TEMPLATE = """
                     var expanded = upcomingList.getAttribute("data-expanded") === "true";
                     var nextState = !expanded;
                     upcomingList.setAttribute("data-expanded", nextState ? "true" : "false");
-                    updateToggleButton(nextState);
+                    updateToggleButtonState(nextState);
                 });
-                updateToggleButton(false);
+                updateToggleButtonState(false);
             }
-            document.querySelectorAll(".mini-calendar-nav").forEach(function (navButton) {
-                navButton.addEventListener("click", function (event) {
+
+            miniNavButtons.forEach(function (button) {
+                button.addEventListener("click", function (event) {
                     event.stopPropagation();
+                    var direction = button.getAttribute("data-mini-nav");
+                    var offset = direction === "next" ? 1 : -1;
+                    changeMonth(offset, false);
                 });
-                navButton.addEventListener("keydown", function (event) {
+                button.addEventListener("keydown", function (event) {
                     event.stopPropagation();
                 });
             });
+
+            if (miniCalendarCard) {
+                miniCalendarCard.addEventListener("click", function (event) {
+                    if (event.target.closest(".mini-day") || event.target.closest(".mini-calendar-nav")) {
+                        return;
+                    }
+                    openOverlay({ forceSelection: true });
+                });
+                miniCalendarCard.addEventListener("keydown", function (event) {
+                    if (event.target.closest(".mini-day") || event.target.closest(".mini-calendar-nav")) {
+                        return;
+                    }
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openOverlay({ forceSelection: true });
+                    }
+                });
+            }
+
+            if (openBtn) {
+                openBtn.addEventListener("click", function () {
+                    openOverlay({ forceSelection: true });
+                });
+            }
+
+            if (upcomingOpenCalendar) {
+                upcomingOpenCalendar.addEventListener("click", function () {
+                    openOverlay({ forceSelection: true });
+                });
+            }
+
+            navButtons.forEach(function (button) {
+                button.addEventListener("click", function () {
+                    var direction = button.getAttribute("data-calendar-nav");
+                    var offset = direction === "next" ? 1 : -1;
+                    changeMonth(offset, true);
+                });
+            });
+
             if (closeBtn) {
                 closeBtn.addEventListener("click", closeOverlay);
             }
@@ -1506,27 +1782,29 @@ HTML_TEMPLATE = """
                     closeOverlay();
                 }
             });
-            if (grid) {
-                grid.addEventListener("click", function (event) {
+
+            if (calendarGrid) {
+                calendarGrid.addEventListener("click", function (event) {
                     var cell = event.target.closest(".calendar-cell");
                     if (!cell) {
                         return;
                     }
-                    selectedDate = cell.getAttribute("data-date");
-                    renderCalendar();
+                    var iso = cell.getAttribute("data-date");
+                    if (!iso) {
+                        return;
+                    }
+                    var parts = iso.split("-");
+                    calendarState.currentYear = parseInt(parts[0], 10);
+                    calendarState.currentMonth = parseInt(parts[1], 10);
+                    calendarState.selectedDate = iso;
+                    renderMiniCalendar();
+                    renderFullCalendar();
+                    renderEventList();
                 });
             }
-            navButtons.forEach(function (button) {
-                button.addEventListener("click", function () {
-                    var direction = button.getAttribute("data-calendar-nav");
-                    var offset = direction === "next" ? 1 : -1;
-                    currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + offset, 1);
-                    renderCalendarGrid();
-                });
-            });
-            renderCalendar();
         });
     </script>
+
 </body>
 </html>
 
@@ -2231,27 +2509,6 @@ def dashboard() -> str:
     mini_calendar = build_mini_calendar_data(
         all_courses_schedule_sorted, today, target_year=target_year, target_month=target_month
     )
-    nav_args = request.args.to_dict()
-
-    def _nav_adjust(year_value: int, month_value: int) -> tuple[int, int]:
-        if month_value < 1:
-            return (year_value - 1, 12)
-        if month_value > 12:
-            return (year_value + 1, 1)
-        return (year_value, month_value)
-
-    current_year = mini_calendar["year"]
-    current_month = mini_calendar["month"]
-    prev_year, prev_month = _nav_adjust(current_year, current_month - 1)
-    next_year, next_month = _nav_adjust(current_year, current_month + 1)
-
-    def _build_month_url(year_value: int, month_value: int) -> str:
-        query = nav_args.copy()
-        query["mini_month"] = f"{year_value:04d}-{month_value:02d}"
-        return url_for("dashboard", **query)
-
-    mini_calendar["prev_url"] = _build_month_url(prev_year, prev_month)
-    mini_calendar["next_url"] = _build_month_url(next_year, next_month)
     week_grouped = group_schedule_by_date(study_schedule_this_week)
     fallback_events = study_schedule_upcoming[:5]
     fallback_grouped = group_schedule_by_date(fallback_events)
@@ -2278,6 +2535,7 @@ def dashboard() -> str:
         upcoming_default_limit=UPCOMING_DEFAULT_LIMIT,
         calendar_events_data=calendar_events_data,
         mini_calendar=mini_calendar,
+        today_iso=today.isoformat(),
     )
 
 
