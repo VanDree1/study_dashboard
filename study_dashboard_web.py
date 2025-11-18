@@ -10,8 +10,9 @@ import calendar
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
+import requests
 from flask import Flask, jsonify, render_template_string, request
 from openai import OpenAI
 
@@ -27,6 +28,8 @@ from courses_client import get_active_courses
 
 app = Flask(__name__)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+CANVAS_BASE_URL = os.getenv("CANVAS_BASE_URL") or ""
+CANVAS_API_KEY = os.getenv("CANVAS_API_KEY") or ""
 COURSES_FILE = Path(__file__).with_name("canvas_courses.json")
 SCIENTIFIC_SCHEDULE_FILE = Path(__file__).with_name("scientific_methods_schedule.json")
 
@@ -243,6 +246,66 @@ SECTION_CONFIG: Tuple[Tuple[str, str, str], ...] = (
     ("THIS WEEK", "This Week", "#ffe8b3"),
     ("LATER", "Later", "#d7e8ff"),
 )
+
+RESROBOT_TRIP_URL = "https://api.resrobot.se/v2.1/trip"
+
+
+def _ensure_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return value
+    if value is None:
+        return []
+    return [value]
+
+
+def _simplify_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
+    legs = _ensure_list(trip.get("LegList", {}).get("Leg"))
+    if not legs:
+        raise ValueError("Trip response is missing legs.")
+
+    def _leg_time(node: Dict[str, Any]) -> datetime:
+        date_str = node.get("date")
+        time_str = node.get("time")
+        if not (date_str and time_str):
+            raise ValueError("A leg is missing date/time information.")
+        return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
+
+    departure_dt = _leg_time(legs[0].get("Origin", {}))
+    arrival_dt = _leg_time(legs[-1].get("Destination", {}))
+    total_minutes = int((arrival_dt - departure_dt).total_seconds() // 60)
+    hours, minutes = divmod(total_minutes, 60)
+
+    simplified_legs: List[Dict[str, Any]] = []
+    for leg in legs:
+        origin = leg.get("Origin", {})
+        destination = leg.get("Destination", {})
+        mode = leg.get("type") or leg.get("name") or "Leg"
+        simplified_legs.append(
+            {
+                "mode": mode,
+                "origin": origin.get("name"),
+                "destination": destination.get("name"),
+                "departureTime": origin.get("time"),
+                "arrivalTime": destination.get("time"),
+            }
+        )
+
+    vehicle_legs = [leg for leg in simplified_legs if str(leg.get("mode")).upper() != "WALK"]
+    number_of_changes = max(len(vehicle_legs) - 1, 0)
+
+    origin_name = simplified_legs[0].get("origin") if simplified_legs else ""
+    destination_name = simplified_legs[-1].get("destination") if simplified_legs else ""
+
+    return {
+        "departureTime": departure_dt.strftime("%H:%M"),
+        "arrivalTime": arrival_dt.strftime("%H:%M"),
+        "totalTravelTime": f"{hours}h {minutes:02d}m",
+        "originName": origin_name,
+        "destinationName": destination_name,
+        "legs": simplified_legs,
+        "numberOfChanges": number_of_changes,
+    }
+
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -952,6 +1015,144 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
         }
+        .travel-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+        .travel-form label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .travel-form input {
+            border: 1px solid #d9dbe8;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .travel-form button {
+            border: none;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            background: linear-gradient(135deg, #111827, #1e293b);
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+        }
+        .travel-form button:active {
+            transform: translateY(1px);
+            box-shadow: 0 6px 12px rgba(15, 23, 42, 0.2);
+        }
+        .travel-status {
+            min-height: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .travel-status.error {
+            color: #b42318;
+        }
+        .travel-result {
+            border: 1px solid #e5e7f0;
+            border-radius: 16px;
+            padding: 16px;
+            background: #f8fafc;
+        }
+        .travel-result.is-hidden {
+            display: none;
+        }
+        .travel-summary-line {
+            font-weight: 600;
+            font-size: 1rem;
+            color: var(--text-strong);
+            margin: 0 0 4px;
+        }
+        .travel-route-line {
+            margin: 0 0 12px;
+            font-size: 0.9rem;
+            color: #475569;
+        }
+        .trip-card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .trip-card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 16px;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            box-shadow: 0 14px 35px rgba(15, 23, 42, 0.1);
+            cursor: pointer;
+            transition: box-shadow 0.2s ease;
+        }
+        .trip-card:hover {
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.15);
+        }
+        .trip-card-header {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .trip-timespan {
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: #0f172a;
+        }
+        .trip-meta {
+            font-size: 0.9rem;
+            color: #475569;
+        }
+        .trip-icons {
+            display: flex;
+            gap: 4px;
+            font-size: 1.05rem;
+        }
+        .trip-card-details {
+            overflow: hidden;
+            max-height: 0;
+            transition: max-height 0.25s ease;
+        }
+        .trip-card.open .trip-card-details {
+            margin-top: 0.75rem;
+        }
+        .trip-legs {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .leg-card {
+            background: #f8fafc;
+            border-radius: 10px;
+            border-left: 3px solid #0f172a;
+            padding: 8px 12px;
+        }
+        .leg-line-primary {
+            margin: 0 0 4px;
+            font-weight: 600;
+            color: var(--text-strong);
+        }
+        .leg-line-secondary {
+            margin: 0;
+            color: #475569;
+            font-size: 0.9rem;
+        }
         .placeholder {
             color: var(--text-muted);
             font-size: 14px;
@@ -1410,6 +1611,33 @@ HTML_TEMPLATE = """
                                     <p class="upcoming-empty">No upcoming events found.</p>
                                 {% endif %}
                             </div>
+                        </div>
+                    </div>
+                </section>
+                <section class="card travel-card">
+                    <div class="card-header header-soft-lilac">
+                        <p class="card-title">Travel Planner: Skärmarbrink → Ekonomikum</p>
+                        <p class="card-subtitle">Powered by ResRobot Route Planner</p>
+                    </div>
+                    <div class="card-body">
+                        <form id="travel-form" class="travel-form">
+                            <label>
+                                Datum
+                                <input type="date" name="travel-date" required />
+                            </label>
+                            <label>
+                                Tid
+                                <input type="time" name="travel-time" required />
+                            </label>
+                            <button type="submit">Find Trip</button>
+                        </form>
+                        <div id="travel-status" class="travel-status" role="status" aria-live="polite"></div>
+                        <div id="travel-result" class="travel-result is-hidden">
+                            <div class="travel-summary">
+                                <p class="travel-summary-line" id="travel-summary-line">–</p>
+                                <p class="travel-route-line">Skärmarbrink T-bana → Ekonomikum, Uppsala</p>
+                            </div>
+                            <div id="travel-trip-list" class="trip-card-list"></div>
                         </div>
                     </div>
                 </section>
@@ -2091,6 +2319,217 @@ HTML_TEMPLATE = """
                     renderMiniCalendar();
                     renderFullCalendar();
                     renderEventList();
+                });
+            }
+
+            var travelOriginId = "740021704"; // Skärmarbrink T-bana
+            var travelDestId = "740007480"; // Ekonomikum, Uppsala
+            var travelForm = document.getElementById("travel-form");
+            if (travelForm) {
+                var travelStatus = document.getElementById("travel-status");
+            var travelResult = document.getElementById("travel-result");
+            var travelSummaryLine = document.getElementById("travel-summary-line");
+            var travelTripList = document.getElementById("travel-trip-list");
+
+                function stripSeconds(value) {
+                    if (!value) {
+                        return "–";
+                    }
+                    var match = String(value).match(/^\d{2}:\d{2}/);
+                    return match ? match[0] : value;
+                }
+
+                function cleanStopName(name) {
+                    if (!name) {
+                        return "–";
+                    }
+                    return String(name).replace(/\s*\([^)]*\)\s*$/, "").trim();
+                }
+
+                function getModeIcon(leg) {
+                    var label = String(leg.modeLabel || leg.mode || "").toLowerCase();
+                    if (label.indexOf("tunnelbana") !== -1 || label.indexOf("subway") !== -1 || label.indexOf("t-bana") !== -1) {
+                        return "🚇";
+                    }
+                    if (label.indexOf("pendeltåg") !== -1 || label.indexOf("tåg") !== -1 || label.indexOf("train") !== -1) {
+                        return "🚆";
+                    }
+                    if (label.indexOf("buss") !== -1 || label.indexOf("bus") !== -1) {
+                        return "🚌";
+                    }
+                    if (label.indexOf("gång") !== -1 || label.indexOf("walk") !== -1) {
+                        return "🚶";
+                    }
+                    return "🚈";
+                }
+
+                function formatSummaryLine(trip) {
+                    var start = stripSeconds(trip.departureTime);
+                    var end = stripSeconds(trip.arrivalTime);
+                    var duration = trip.totalTravelTime || "–";
+                    var changeCount = Number.isFinite(trip.changes)
+                        ? trip.changes
+                        : Number.isFinite(trip.numChanges)
+                        ? trip.numChanges
+                        : 0;
+                    var changesLabel = changeCount === 1 ? "1 byte" : changeCount + " byten";
+                    return start + " – " + end + " • " + duration + " • " + changesLabel;
+                }
+
+                function setTravelStatus(message, isError) {
+                    if (travelStatus) {
+                        travelStatus.textContent = message || "";
+                        travelStatus.classList.toggle("error", Boolean(isError));
+                    }
+                }
+
+                function resetTravelResult() {
+                    if (travelResult) {
+                        travelResult.classList.add("is-hidden");
+                    }
+                    if (travelTripList) {
+                        travelTripList.innerHTML = "";
+                    }
+                    if (travelSummaryLine) {
+                        travelSummaryLine.textContent = "–";
+                    }
+                }
+
+                function renderLeg(list, leg) {
+                    var item = document.createElement("li");
+                    item.className = "leg-card";
+                    var mode = leg.modeLabel || leg.mode || "Resa";
+                    var originLabel = cleanStopName(leg.origin);
+                    var destinationLabel = cleanStopName(leg.destination);
+                    var start = stripSeconds(leg.departure || leg.departureTime);
+                    var end = stripSeconds(leg.arrival || leg.arrivalTime);
+                    item.innerHTML =
+                        '<p class="leg-line-primary">' +
+                        start +
+                        " – " +
+                        end +
+                        " • " +
+                        mode +
+                        "</p>" +
+                        '<p class="leg-line-secondary">' +
+                        originLabel +
+                        " → " +
+                        destinationLabel +
+                        "</p>";
+                    list.appendChild(item);
+                }
+
+                travelForm.addEventListener("submit", function (event) {
+                    event.preventDefault();
+                    var dateInput = travelForm.elements["travel-date"];
+                    var timeInput = travelForm.elements["travel-time"];
+                    var dateValue = dateInput ? dateInput.value : "";
+                    var timeValue = timeInput ? timeInput.value : "";
+
+                    if (!dateValue || !timeValue) {
+                        setTravelStatus("Please provide both date and time.", true);
+                        return;
+                    }
+
+                    resetTravelResult();
+                    setTravelStatus("Searching for trip…", false);
+
+                    var params = new URLSearchParams({
+                        originId: travelOriginId,
+                        destId: travelDestId,
+                        date: dateValue,
+                        time: timeValue,
+                    });
+
+                    fetch("/api/travel?" + params.toString())
+                        .then(function (response) {
+                            return response.json().then(function (payload) {
+                                return { ok: response.ok, payload: payload };
+                            });
+                        })
+                        .then(function (result) {
+                            if (!result.ok) {
+                                throw new Error(result.payload.error || "Unable to load travel plan.");
+                            }
+                            var data = result.payload || {};
+                            var trips = Array.isArray(data.trips) ? data.trips : [];
+                            if (!trips.length) {
+                                throw new Error("Ingen resa hittades.");
+                            }
+                            var firstTrip = trips[0];
+                            if (travelSummaryLine) {
+                                travelSummaryLine.textContent = formatSummaryLine(firstTrip);
+                            }
+                            if (travelTripList) {
+                                travelTripList.innerHTML = "";
+                                trips.forEach(function (trip) {
+                                    var card = document.createElement("div");
+                                    card.className = "trip-card";
+
+                                    var header = document.createElement("div");
+                                    header.className = "trip-card-header";
+                                    var depLabel = stripSeconds(trip.departureTime);
+                                    var arrLabel = stripSeconds(trip.arrivalTime);
+                                    var duration = trip.totalTravelTime || "–";
+                                    var changeCount = Number.isFinite(trip.changes)
+                                        ? trip.changes
+                                        : Number.isFinite(trip.numChanges)
+                                        ? trip.numChanges
+                                        : 0;
+                                    var span = document.createElement("div");
+                                    span.className = "trip-timespan";
+                                    span.textContent = depLabel + " → " + arrLabel;
+                                    var meta = document.createElement("div");
+                                    meta.className = "trip-meta";
+                                    meta.textContent = duration + " • " + (changeCount === 1 ? "1 byte" : changeCount + " byten");
+                                    var iconsRow = document.createElement("div");
+                                    iconsRow.className = "trip-icons";
+                                    var iconSet = [];
+                                    (trip.legs || []).forEach(function (leg) {
+                                        var icon = getModeIcon(leg);
+                                        if (icon && iconSet.indexOf(icon) === -1) {
+                                            iconSet.push(icon);
+                                        }
+                                    });
+                                    iconsRow.innerHTML = iconSet.map(function (icon) {
+                                        return "<span>" + icon + "</span>";
+                                    }).join("");
+                                    header.appendChild(span);
+                                    header.appendChild(meta);
+                                    header.appendChild(iconsRow);
+                                    card.appendChild(header);
+
+                                    var details = document.createElement("div");
+                                    details.className = "trip-card-details";
+                                    details.style.maxHeight = "0";
+                                    var list = document.createElement("ul");
+                                    list.className = "trip-legs";
+                                    (trip.legs || []).forEach(function (leg) {
+                                        renderLeg(list, leg);
+                                    });
+                                    details.appendChild(list);
+                                    card.appendChild(details);
+
+                                    card.addEventListener("click", function () {
+                                        var isOpen = card.classList.toggle("open");
+                                        if (isOpen) {
+                                            details.style.maxHeight = details.scrollHeight + "px";
+                                        } else {
+                                            details.style.maxHeight = "0";
+                                        }
+                                    });
+
+                                    travelTripList.appendChild(card);
+                                });
+                            }
+                            if (travelResult) {
+                                travelResult.classList.remove("is-hidden");
+                            }
+                            setTravelStatus("Trip ready! ✨", false);
+                        })
+                        .catch(function (error) {
+                            setTravelStatus(error.message || "Unable to load travel plan.", true);
+                        });
                 });
             }
         });
@@ -2891,10 +3330,14 @@ def build_mini_calendar_data(
 def dashboard() -> str:
     grouped = build_grouped_tasks()
     courses = load_courses()
-    try:
-        canvas_courses = get_active_courses()
-    except RuntimeError as exc:
-        app.logger.error("Failed to fetch Canvas courses: %s", exc)
+    if CANVAS_BASE_URL and CANVAS_API_KEY:
+        os.environ.setdefault("CANVAS_TOKEN", CANVAS_API_KEY)
+        try:
+            canvas_courses = get_active_courses()
+        except RuntimeError as exc:
+            app.logger.error("Failed to fetch Canvas courses: %s", exc)
+            canvas_courses = []
+    else:
         canvas_courses = []
     today = datetime.now(TIMEZONE).date()
     upcoming_events: List[Dict[str, object]] = []
@@ -2982,6 +3425,81 @@ def dashboard() -> str:
         mini_calendar=mini_calendar,
         today_iso=today.isoformat(),
     )
+
+
+@app.route("/api/travel")
+def travel_api() -> tuple[object, int] | object:
+    origin_id = request.args.get("originId")
+    dest_id = request.args.get("destId")
+    travel_date = request.args.get("date")
+    travel_time = request.args.get("time")
+
+    if not all([origin_id, dest_id, travel_date, travel_time]):
+        return jsonify({"error": "originId, destId, date, and time are required."}), 400
+
+    api_key = os.getenv("RESROBOT_API_KEY")
+    if not api_key:
+        return jsonify({"error": "RESROBOT_API_KEY is not configured on the server."}), 500
+
+    try:
+        response = requests.get(
+            RESROBOT_TRIP_URL,
+            params={
+                "accessId": api_key,
+                "originId": origin_id,
+                "destId": dest_id,
+                "date": travel_date,
+                "time": travel_time,
+                "format": "json",
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        app.logger.error("Error calling ResRobot: %s", exc)
+        return jsonify({"error": "Could not fetch trip information."}), 502
+
+    if response.status_code != 200:
+        snippet = response.text[:200] if response.text else ""
+        debug_params = {
+            "originId": origin_id,
+            "destId": dest_id,
+            "date": travel_date,
+            "time": travel_time,
+        }
+        app.logger.error(
+            "ResRobot error: status=%s params=%s body=%s",
+            response.status_code,
+            debug_params,
+            snippet,
+        )
+        return (
+            jsonify(
+                {
+                    "error": "ResRobot returned an error.",
+                    "status_code": response.status_code,
+                    "details": snippet,
+                    "params": debug_params,
+                }
+            ),
+            502,
+        )
+
+    try:
+        payload = response.json()
+    except ValueError:
+        app.logger.error("Invalid JSON from ResRobot (trip endpoint).")
+        return jsonify({"error": "Invalid response from ResRobot."}), 500
+
+    trips = _ensure_list(payload.get("Trip"))
+    if not trips:
+        return jsonify({"error": "Ingen resa hittades för den här sökningen."}), 404
+
+    try:
+        simplified_trips = [_simplify_trip(trip) for trip in trips]
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"trips": simplified_trips})
 
 
 @app.route("/chat", methods=["POST"])

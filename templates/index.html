@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reseplanerare</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="wrapper">
+      <h1>Reseplanerare: Skärmarbrink → Ekonomikum</h1>
+      <form id="tripForm" class="trip-form">
+        <label>
+          Datum
+          <input type="date" name="date" required />
+        </label>
+        <label>
+          Tid
+          <input type="time" name="time" required />
+        </label>
+        <button type="submit">Sök resa</button>
+      </form>
+
+      <section id="status" class="status" role="status" aria-live="polite"></section>
+
+      <section id="result" class="result hidden"></section>
+    </main>
+    <script src="{{ url_for('static', filename='main.js') }}?v=999" defer></script>
+  </body>
+</html>
