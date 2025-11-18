@@ -258,7 +258,16 @@ def _ensure_list(value: Any) -> List[Any]:
     return [value]
 
 
+def count_transfers(trip: Dict[str, Any]) -> int:
+    legs = trip.get("legs") or []
+    vehicle_legs = [
+        leg for leg in legs if str(leg.get("mode") or "").upper() != "WALK"
+    ]
+    return max(len(vehicle_legs) - 1, 0)
+
+
 def _simplify_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
+    # Hämta alla legs från API-svaret
     legs = _ensure_list(trip.get("LegList", {}).get("Leg"))
     if not legs:
         raise ValueError("Trip response is missing legs.")
@@ -270,16 +279,20 @@ def _simplify_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("A leg is missing date/time information.")
         return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S")
 
+    # Totala tiden
     departure_dt = _leg_time(legs[0].get("Origin", {}))
     arrival_dt = _leg_time(legs[-1].get("Destination", {}))
     total_minutes = int((arrival_dt - departure_dt).total_seconds() // 60)
     hours, minutes = divmod(total_minutes, 60)
 
+    # Förenklad lista med delresor
     simplified_legs: List[Dict[str, Any]] = []
     for leg in legs:
         origin = leg.get("Origin", {})
         destination = leg.get("Destination", {})
-        mode = leg.get("type") or leg.get("name") or "Leg"
+        # mode/type för legs, versaler för att kunna jämföra
+        mode = (leg.get("type") or leg.get("name") or "Leg").upper()
+
         simplified_legs.append(
             {
                 "mode": mode,
@@ -290,13 +303,18 @@ def _simplify_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
-    vehicle_legs = [leg for leg in simplified_legs if str(leg.get("mode")).upper() != "WALK"]
+    # Räkna byten: endast fordon, inte gång
+    vehicle_legs = [
+        l
+        for l in simplified_legs
+        if (l.get("mode") or "").upper() not in ("WALK", "GÅNG")
+    ]
     number_of_changes = max(len(vehicle_legs) - 1, 0)
 
     origin_name = simplified_legs[0].get("origin") if simplified_legs else ""
     destination_name = simplified_legs[-1].get("destination") if simplified_legs else ""
 
-    return {
+    simplified_trip = {
         "departureTime": departure_dt.strftime("%H:%M"),
         "arrivalTime": arrival_dt.strftime("%H:%M"),
         "totalTravelTime": f"{hours}h {minutes:02d}m",
@@ -306,6 +324,16 @@ def _simplify_trip(trip: Dict[str, Any]) -> Dict[str, Any]:
         "numberOfChanges": number_of_changes,
     }
 
+    return simplified_trip
+    return {
+        "departureTime": dep,
+        "arrivalTime": arr,
+        "totalTravelTime": total_travel_time,
+        "originName": origin_name,
+        "destinationName": destination_name,
+        "legs": simplified_legs,
+        "numberOfChanges": number_of_changes,
+    }
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -1627,7 +1655,10 @@ HTML_TEMPLATE = """
                             </label>
                             <label>
                                 Tid
-                                <input type="time" name="travel-time" required />
+                                <div class="time-input-row">
+                                    <input type="time" name="travel-time" id="travel-time-input" required />
+                                    <button type="button" class="time-now-btn" id="travel-now-button">Nu</button>
+                                </div>
                             </label>
                             <button type="submit">Find Trip</button>
                         </form>

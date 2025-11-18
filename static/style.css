@@ -45,6 +45,32 @@ h1 {
   font-size: 1rem;
 }
 
+.time-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.time-input-row input {
+  flex: 1;
+}
+
+.time-now-btn {
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  background: rgba(248, 250, 252, 0.8);
+  color: #0f172a;
+  padding: 0.4rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.time-now-btn:hover {
+  background: rgba(226, 232, 240, 0.8);
+  border-color: rgba(15, 23, 42, 0.35);
+}
+
 .trip-form button {
   align-self: end;
   padding: 0.75rem 1rem;
@@ -170,4 +196,51 @@ h1 {
 .leg-mode {
   text-align: right;
   font-size: 0.9rem;
+}
+
+.skeleton-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton-card {
+  border-radius: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: rgba(241, 245, 249, 0.9);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #e2e8f0, #f8fafc, #e2e8f0);
+  background-size: 200% 100%;
+  border-radius: 999px;
+  margin-bottom: 0.6rem;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton-line:last-child {
+  margin-bottom: 0;
+}
+
+.skeleton-line.wide {
+  width: 70%;
+}
+
+.skeleton-line.medium {
+  width: 55%;
+}
+
+.skeleton-line.short {
+  width: 35%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
