@@ -1648,50 +1648,36 @@ HTML_TEMPLATE = """
                         <p class="card-subtitle">Powered by ResRobot Route Planner</p>
                     </div>
                     <div class="card-body">
-<form id="travel-form" class="travel-form">                                Datum
+                        <form id="travel-form" class="travel-form">
+                            <label>
+                                Datum
                                 <input type="date" name="travel-date" required />
                             </label>
                             <label>
                                 Tid
-                                <div class="time-input-row">
-                                   <input type="time" name="travel-time" id="travel-time-input" required />
-                                    <button type="button" class="time-now-btn" id="travel-now-button">Nu</button>
-                                </div>
+                                <input type="time" name="travel-time" id="travel-time-input" required />
                             </label>
-                            <button type="submit">Find Trip</button>
-                        </form> <script>
-  window.addEventListener("DOMContentLoaded", () => {
-    const dateInput = document.querySelector('input[name="travel-date"]');
-    const timeInput = document.querySelector('input[name="travel-time"]');
-    const nowButton = document.getElementById("travel-now-button");
+                            <p class="time-helper-text">Standard: åka nu. Ändra tid om du vill åka senare.</p>
+                            <button type="submit">Sök resa</button>
+                        </form>
+                        <script>
+                          window.addEventListener("DOMContentLoaded", () => {
+                            const dateInput = document.querySelector('input[name="travel-date"]');
+                            const timeInput = document.querySelector('input[name="travel-time"]');
 
-    const setNowValues = (forceTime = false) => {
-      const now = new Date();
+                            const setNowValues = () => {
+                              const now = new Date();
+                              if (dateInput && !dateInput.value) {
+                                dateInput.value = now.toISOString().slice(0, 10); // YYYY-MM-DD
+                              }
+                              if (timeInput && !timeInput.value) {
+                                timeInput.value = now.toTimeString().slice(0, 5); // HH:mm
+                              }
+                            };
 
-      // sätt dagens datum om det är tomt
-      if (dateInput && !dateInput.value) {
-        dateInput.value = now.toISOString().slice(0, 10); // YYYY-MM-DD
-      }
-
-      // sätt tiden (HH:mm)
-      if (timeInput && (forceTime || !timeInput.value)) {
-        timeInput.value = now.toTimeString().slice(0, 5);
-      }
-    };
-
-    // Fyll i datum + tid när sidan laddas
-    setNowValues(false);
-
-    // När man trycker "Nu" – uppdatera tiden till nu
-    if (nowButton && timeInput) {
-      nowButton.addEventListener("click", (event) => {
-        event.preventDefault(); // så vi inte råkar trigga formsubmit
-        setNowValues(true);
-        timeInput.focus();
-      });
-    }
-  });
-</script>
+                            setNowValues();
+                          });
+                        </script>
                         <div id="travel-status" class="travel-status" role="status" aria-live="polite"></div>
                         <div id="travel-result" class="travel-result is-hidden">
                             <div class="travel-summary">

@@ -68,16 +68,22 @@ const applyInitialDateTime = () => {
 };
 
 const attachNowButtons = () => {
-  const buttons = document.querySelectorAll(".time-now-btn");
+  const timeInput =
+    document.getElementById("travel-time-input") ||
+    document.querySelector('input[name="time"]');
+  const nowButton = document.getElementById("travel-now-button");
 
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const value = getCurrentTime();
-      document.querySelectorAll('input[type="time"]').forEach((input) => {
-        input.value = value;
-      });
+  if (timeInput && nowButton) {
+    nowButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      const t = new Date();
+      t.setMinutes(t.getMinutes() + 2);
+      const hh = String(t.getHours()).padStart(2, "0");
+      const mm = String(t.getMinutes()).padStart(2, "0");
+      timeInput.value = `${hh}:${mm}`;
+      timeInput.focus();
     });
-  });
+  }
 };
 
 // Körs EN gång när sidan laddas
