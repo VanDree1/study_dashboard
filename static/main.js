@@ -1,3 +1,4 @@
+// ----- Helpers för texten "Direkt" / "X byten" -----
 const formatChangesText = (numChanges) => {
   const numeric = Number(numChanges);
   if (!Number.isFinite(numeric) || numeric === 0) {
@@ -5,6 +6,8 @@ const formatChangesText = (numChanges) => {
   }
   return `${numeric} byten`;
 };
+
+// ----- Grundreferenser i DOMen -----
 const form = document.getElementById("tripForm");
 const statusBox = document.getElementById("status");
 const resultSection = document.getElementById("result");
@@ -12,6 +15,8 @@ const ROUTE_LABEL = "Skärmarbrink T-bana → Ekonomikum, Uppsala";
 const departureEl = document.getElementById("travel-departure");
 const arrivalEl = document.getElementById("travel-arrival");
 const durationEl = document.getElementById("travel-duration");
+
+// ----- Små helpers -----
 const stripSeconds = (value) => {
   if (!value) return "-";
   const match = String(value).match(/^\d{2}:\d{2}/);
@@ -24,7 +29,7 @@ const cleanStopName = (name) => {
 };
 
 const getModeIcon = (mode = "") => {
-  const label = mode.toLowerCase();
+  const label = String(mode).toLowerCase();
   if (label.includes("metro") || label.includes("t-bana") || label.includes("subway")) return "🚇";
   if (label.includes("train") || label.includes("tåg") || label.includes("jny")) return "🚆";
   if (label.includes("bus") || label.includes("buss")) return "🚌";
@@ -34,34 +39,11 @@ const getModeIcon = (mode = "") => {
   return "•";
 };
 
+// ----- Origin / destination -----
 const ORIGIN_ID = "740021704"; // Skärmarbrink T-bana
-const DEST_ID = "740007480"; // Ekonomikum, Uppsala
+const DEST_ID = "740007480";   // Ekonomikum, Uppsala
 
-window.addEventListener("DOMContentLoaded", () => {
-  const now = new Date();
-  const dateInput =
-    document.querySelector('input[name="date"]') ||
-    document.querySelector('input[name="travel-date"]');
-  if (dateInput && !dateInput.value) {
-    dateInput.value = now.toISOString().slice(0, 10);
-  }
-  const timeInput =
-    document.getElementById("travel-time-input") ||
-    document.querySelector('input[name="time"]') ||
-    document.querySelector('input[name="travel-time"]');
-  if (timeInput && !timeInput.value) {
-    timeInput.value = now.toTimeString().slice(0, 5);
-  }
-  const nowButton = document.getElementById("travel-now-button");
-  if (timeInput && nowButton) {
-    nowButton.addEventListener("click", () => {
-      const t = new Date();
-      timeInput.value = t.toTimeString().slice(0, 5);
-      timeInput.focus();
-    });
-  }
-});
-
+// ----- Datum / tid helpers -----
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
 
 const getCurrentTime = () => {
@@ -72,64 +54,39 @@ const getCurrentTime = () => {
 };
 
 const applyInitialDateTime = () => {
-  document.querySelectorAll('input[name="date"], input[name="travel-date"]').forEach((input) => {
-    if (!input.value) input.value = getTodayDate();
-  });
-  document.querySelectorAll('input[name="time"], input[name="travel-time"]').forEach((input) => {
-    if (!input.value) input.value = getCurrentTime();
-  });
+  document
+    .querySelectorAll('input[name="date"], input[name="travel-date"]')
+    .forEach((input) => {
+      if (!input.value) input.value = getTodayDate();
+    });
+
+  document
+    .querySelectorAll('input[name="time"], input[name="travel-time"]')
+    .forEach((input) => {
+      if (!input.value) input.value = getCurrentTime();
+    });
 };
 
 const attachNowButtons = () => {
-  document.querySelectorAll("#time-now-btn, #travel-time-now").forEach((button) => {
+  const buttons = document.querySelectorAll(".time-now-btn");
+
+  buttons.forEach((button) => {
     button.addEventListener("click", () => {
-      const target = button.closest("label")?.querySelector('input[type="time"]') || document.querySelector('input[name="time"]');
-      if (target) {
-        target.value = getCurrentTime();
-        target.focus();
-      }
+      const value = getCurrentTime();
+      document.querySelectorAll('input[type="time"]').forEach((input) => {
+        input.value = value;
+      });
     });
   });
 };
 
+// Körs EN gång när sidan laddas
 document.addEventListener("DOMContentLoaded", () => {
   applyInitialDateTime();
   attachNowButtons();
 });
 
-const getTodayDate = () => {
-  const now = new Date();
-  return now.toISOString().slice(0, 10);
-};
-
-const getCurrentTime = () => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-};
-
-const setInitialDateTime = () => {
-  const dateField = document.querySelector('input[name="date"]');
-  const timeField = document.querySelector('input[name="time"]');
-  if (dateField && !dateField.value) {
-    dateField.value = getTodayDate();
-  }
-  if (timeField && !timeField.value) {
-    timeField.value = getCurrentTime();
-  }
-};
-
-const attachNowButtons = () => {
-  const timeField = document.querySelector('input[name="time"]');
-  const buttons = document.querySelectorAll("#time-now-btn, #travel-time-now");
-  buttons.forEach((btn) =>
-    btn.addEventListener("click", () => {
-      if (timeField) {
-        timeField.value = getCurrentTime();
-      }
-    })
-  );
-};
-
+// ----- Skeleton loader -----
 const showSkeleton = () => {
   if (!resultSection) return;
   const skeletonCards = Array.from({ length: 3 })
@@ -149,17 +106,18 @@ const showSkeleton = () => {
 const hideSkeleton = () => {
   if (!resultSection) return;
   const wrapper = resultSection.querySelector(".skeleton-wrapper");
-  if (wrapper) {
-    wrapper.remove();
-  }
+  if (wrapper) wrapper.remove();
 };
 
+// ----- Status / reset / fel -----
 const showStatus = (message, isError = false) => {
+  if (!statusBox) return;
   statusBox.textContent = message;
   statusBox.classList.toggle("error", isError);
 };
 
 const resetResult = () => {
+  if (!resultSection) return;
   resultSection.classList.add("hidden");
   resultSection.innerHTML = "";
   if (departureEl) departureEl.textContent = "-";
@@ -171,180 +129,156 @@ const handleTravelError = (payload) => {
   console.error("Travel API error:", payload);
   let message = "Ett fel uppstod vid hämtning av resa.";
   if (payload && typeof payload === "object") {
-    if (payload.error) {
-      message = payload.error;
-    }
-    if (payload.details) {
-      message += ` (${payload.details})`;
-    }
+    if (payload.error) message = payload.error;
+    if (payload.details) message += ` (${payload.details})`;
   }
   hideSkeleton();
   resetResult();
   showStatus(message, true);
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  setInitialDateTime();
-  attachNowButtons();
-});
+// ----- Submit-handler -----
+if (form) {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    const date = formData.get("date") || formData.get("travel-date");
+    const time = formData.get("time") || formData.get("travel-time");
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const formData = new FormData(form);
-  const date = formData.get("date");
-  const time = formData.get("time");
+    if (!date || !time) {
+      showStatus("Fyll i både datum och tid.", true);
+      return;
+    }
 
-  if (!date || !time) {
-    showStatus("Fyll i både datum och tid.", true);
-    return;
-  }
+    resetResult();
+    showStatus("Söker resa...", false);
+    showSkeleton();
 
-  resetResult();
-  showStatus("Söker resa...", false);
-  showSkeleton();
+    const params = new URLSearchParams({
+      originId: ORIGIN_ID,
+      destId: DEST_ID,
+      date,
+      time,
+    });
 
-  const params = new URLSearchParams({
-    originId: ORIGIN_ID,
-    destId: DEST_ID,
-    date,
-    time,
-  });
+    try {
+      const response = await fetch(`/api/travel?${params.toString()}`);
+      const payload = await response.json();
+      console.log("Travel payload:", payload);
 
-  try {const response = await fetch(`/api/travel?${params.toString()}`);
-    const payload = await response.json();
-    console.log("Travel payload:", payload);
-
-    {
-      const trips = payload.trips || [];
+      const trips = Array.isArray(payload.trips) ? payload.trips : [];
       if (!trips.length) {
         handleTravelError({ error: "Ingen resa hittades." });
         return;
       }
 
       const firstTrip = trips[0];
-      if (departureEl) {
-        departureEl.textContent = firstTrip.departureTime || "-";
+      if (departureEl) departureEl.textContent = firstTrip.departureTime || "-";
+      if (arrivalEl) arrivalEl.textContent = firstTrip.arrivalTime || "-";
+      if (durationEl) durationEl.textContent = firstTrip.totalTravelTime || "-";
+
+      if (!response.ok) {
+        handleTravelError(payload);
+        return;
       }
-      if (arrivalEl) {
-        arrivalEl.textContent = firstTrip.arrivalTime || "-";
-      }
-      if (durationEl) {
-        durationEl.textContent = firstTrip.totalTravelTime || "-";
-      }
-    }
 
-    if (!response.ok) {
-      handleTravelError(payload);
-      return;
-    }
+      hideSkeleton();
 
-    hideSkeleton();
+      resultSection.innerHTML = "";
+      const list = document.createElement("div");
+      list.className = "trip-list";
 
-    const trips = Array.isArray(payload.trips) ? payload.trips : [];
-    if (!trips.length) {
-      handleTravelError({ error: "Ingen resa hittades." });
-      return;
-    }
+      trips.slice(0, 3).forEach((trip) => {
+        const card = document.createElement("article");
+        card.className = "trip-card";
 
-    resultSection.innerHTML = "";
-    const list = document.createElement("div");
-    list.className = "trip-list";
+        const header = document.createElement("div");
+        header.className = "trip-header";
 
-    (trips || []).slice(0, 3).forEach((trip) => {
-      const card = document.createElement("article");
-      card.className = "trip-card";
-
-      // header: tid + restid + byten
-      const header = document.createElement("div");
-      header.className = "trip-header";
-
-      const title = document.createElement("div");
-      title.className = "trip-title";
-      title.textContent = `${stripSeconds(trip.departureTime)} → ${stripSeconds(
-        trip.arrivalTime
-      )}`;
-
-      // hämta antal byten från backend
-      const changesCount = Number.isFinite(Number(trip.numberOfChanges))
-        ? Number(trip.numberOfChanges)
-        : 0;
-
-      const meta = document.createElement("div");
-      meta.className = "trip-meta";
-      meta.textContent = `${trip.totalTravelTime || "-"} • ${formatChangesText(
-        changesCount
-      )}`;
-
-      header.appendChild(title);
-      header.appendChild(meta);
-
-      // rad under: från–till
-      const summary = document.createElement("div");
-      summary.className = "trip-summary";
-      const origin = cleanStopName(
-        trip.originName || ROUTE_LABEL.split(" → ")[0]
-      );
-      const dest = cleanStopName(
-        trip.destinationName || ROUTE_LABEL.split(" → ")[1]
-      );
-      summary.textContent = `${origin} → ${dest}`;
-
-      // knapp + detaljer (delresor)
-      const toggleButton = document.createElement("button");
-      toggleButton.type = "button";
-      toggleButton.className = "trip-toggle";
-      toggleButton.textContent = "Visa detaljer";
-
-      const details = document.createElement("div");
-      details.classList.add("trip-details", "hidden");
-
-      (trip.legs || []).forEach((leg) => {
-        const row = document.createElement("div");
-        row.className = "leg-row";
-
-        const time = document.createElement("div");
-        time.className = "leg-time";
-        time.textContent = `${stripSeconds(
-          leg.departureTime
-        )} → ${stripSeconds(leg.arrivalTime)}`;
-
-        const info = document.createElement("div");
-        info.className = "leg-info";
-        info.textContent = `${cleanStopName(leg.origin)} → ${cleanStopName(
-          leg.destination
+        const title = document.createElement("div");
+        title.className = "trip-title";
+        title.textContent = `${stripSeconds(trip.departureTime)} → ${stripSeconds(
+          trip.arrivalTime
         )}`;
 
-        const mode = document.createElement("div");
-        mode.className = "leg-mode";
-        const icon = getModeIcon(leg.mode || "");
-        mode.textContent = `${icon} ${leg.mode || ""}`.trim();
+        const changesCount = Number.isFinite(Number(trip.numberOfChanges))
+          ? Number(trip.numberOfChanges)
+          : 0;
 
-        row.appendChild(time);
-        row.appendChild(info);
-        row.appendChild(mode);
-        details.appendChild(row);
+        const meta = document.createElement("div");
+        meta.className = "trip-meta";
+        meta.textContent = `${trip.totalTravelTime || "-"} • ${formatChangesText(
+          changesCount
+        )}`;
+
+        header.appendChild(title);
+        header.appendChild(meta);
+
+        const summary = document.createElement("div");
+        summary.className = "trip-summary";
+        const origin = cleanStopName(
+          trip.originName || ROUTE_LABEL.split(" → ")[0]
+        );
+        const dest = cleanStopName(
+          trip.destinationName || ROUTE_LABEL.split(" → ")[1]
+        );
+        summary.textContent = `${origin} → ${dest}`;
+
+        const toggleButton = document.createElement("button");
+        toggleButton.type = "button";
+        toggleButton.className = "trip-toggle";
+        toggleButton.textContent = "Visa detaljer";
+
+        const details = document.createElement("div");
+        details.classList.add("trip-details", "hidden");
+
+        (trip.legs || []).forEach((leg) => {
+          const row = document.createElement("div");
+          row.className = "leg-row";
+
+          const timeEl = document.createElement("div");
+          timeEl.className = "leg-time";
+          timeEl.textContent = `${stripSeconds(
+            leg.departureTime
+          )} → ${stripSeconds(leg.arrivalTime)}`;
+
+          const info = document.createElement("div");
+          info.className = "leg-info";
+          info.textContent = `${cleanStopName(leg.origin)} → ${cleanStopName(
+            leg.destination
+          )}`;
+
+          const mode = document.createElement("div");
+          mode.className = "leg-mode";
+          const icon = getModeIcon(leg.mode || "");
+          mode.textContent = `${icon} ${leg.mode || ""}`.trim();
+
+          row.appendChild(timeEl);
+          row.appendChild(info);
+          row.appendChild(mode);
+          details.appendChild(row);
+        });
+
+        toggleButton.addEventListener("click", () => {
+          const isHidden = details.classList.contains("hidden");
+          details.classList.toggle("hidden", !isHidden);
+          toggleButton.textContent = isHidden ? "Dölj detaljer" : "Visa detaljer";
+        });
+
+        card.appendChild(header);
+        card.appendChild(summary);
+        card.appendChild(toggleButton);
+        card.appendChild(details);
+
+        list.appendChild(card);
       });
 
-      toggleButton.addEventListener("click", () => {
-        const isHidden = details.classList.contains("hidden");
-        details.classList.toggle("hidden", !isHidden);
-        toggleButton.textContent = isHidden ? "Dölj detaljer" : "Visa detaljer";
-      });
-
-      card.appendChild(header);
-      card.appendChild(summary);
-      card.appendChild(toggleButton);
-      card.appendChild(details);
-
-      list.appendChild(card);
-    });
-
-    resultSection.appendChild(list);
-
-    resultSection.classList.remove("hidden");
-    showStatus("Resa hittad ✨");
-  } catch (error) {
-    console.error(error);
-    handleTravelError({ error: error.message || "Kunde inte hämta resa." });
-  }
-});
+      resultSection.appendChild(list);
+      resultSection.classList.remove("hidden");
+      showStatus("Resa hittad ✨");
+    } catch (error) {
+      console.error(error);
+      handleTravelError({ error: error.message || "Kunde inte hämta resa." });
+    }
+  });
+}
